@@ -152,7 +152,7 @@ function BriefDocument({ brief }: { brief: ExecutiveBrief }) {
         </Section>
 
         <footer className="border-t border-border pt-4 text-[11px] text-muted-foreground">
-          SupplyChain Command Center · Auto-generated operational intelligence. Figures derived from
+          ATLASOPS · Auto-generated operational intelligence. Figures derived from
           live network telemetry at time of generation.
         </footer>
       </CardContent>

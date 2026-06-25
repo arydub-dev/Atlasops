@@ -8,7 +8,7 @@ def test_login_and_me(client, ops_headers):
 
 
 def test_login_rejects_bad_password(client):
-    r = client.post("/api/v1/auth/login", data={"username": "ops@scc.io", "password": "wrong"})
+    r = client.post("/api/v1/auth/login", data={"username": "ops@atlasops.io", "password": "wrong"})
     assert r.status_code == 401
 
 

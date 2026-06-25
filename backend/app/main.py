@@ -1,4 +1,4 @@
-"""FastAPI application entrypoint for the SupplyChain Command Center."""
+"""FastAPI application entrypoint for ATLASOPS."""
 from __future__ import annotations
 
 import logging
@@ -11,7 +11,7 @@ from app.api.router import api_router
 from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("scc")
+logger = logging.getLogger("atlasops")
 
 app = FastAPI(
     title=settings.APP_NAME,

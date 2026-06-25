@@ -96,8 +96,8 @@ export const STATUS_COLORS: Record<string, string> = {
 };
 
 export const DEMO_CREDENTIALS = [
-  { role: "Admin", email: "admin@scc.io", password: "admin1234" },
-  { role: "Operations Manager", email: "ops@scc.io", password: "ops12345" },
-  { role: "Analyst", email: "analyst@scc.io", password: "analyst123" },
-  { role: "Executive", email: "exec@scc.io", password: "exec12345" },
+  { role: "Admin", email: "admin@atlasops.io", password: "admin1234" },
+  { role: "Operations Manager", email: "ops@atlasops.io", password: "ops12345" },
+  { role: "Analyst", email: "analyst@atlasops.io", password: "analyst123" },
+  { role: "Executive", email: "exec@atlasops.io", password: "exec12345" },
 ];

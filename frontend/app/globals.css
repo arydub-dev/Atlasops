@@ -140,6 +140,86 @@
         transparent 70%
       );
   }
+
+  /* ---- Marketing site utilities ---- */
+  .dotgrid {
+    background-image: radial-gradient(
+      hsl(var(--foreground) / 0.06) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+  .text-gradient {
+    background: linear-gradient(
+      120deg,
+      hsl(222 47% 11%),
+      hsl(221 83% 53%)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 12%,
+      #000 88%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 12%,
+      #000 88%,
+      transparent
+    );
+  }
+  .shadow-premium {
+    box-shadow:
+      0 1px 1px hsl(222 47% 11% / 0.04),
+      0 4px 8px -2px hsl(222 47% 11% / 0.06),
+      0 24px 48px -16px hsl(222 47% 11% / 0.14);
+  }
+  .shadow-card {
+    box-shadow:
+      0 1px 2px hsl(222 47% 11% / 0.05),
+      0 8px 24px -16px hsl(222 47% 11% / 0.18);
+  }
+  .hero-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.6) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 40px 40px;
+    -webkit-mask-image: radial-gradient(
+      70% 60% at 50% 30%,
+      #000,
+      transparent 75%
+    );
+    mask-image: radial-gradient(70% 60% at 50% 30%, #000, transparent 75%);
+  }
+  .animate-delay-100 {
+    animation-delay: 0.1s;
+  }
+  .animate-delay-200 {
+    animation-delay: 0.2s;
+  }
+  .animate-delay-300 {
+    animation-delay: 0.3s;
+  }
+  .animate-delay-500 {
+    animation-delay: 0.5s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* Print: only the brief is printed, full-bleed and theme-neutral */

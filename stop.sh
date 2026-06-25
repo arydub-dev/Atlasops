@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop the SupplyChain Command Center servers started by start.sh
+# Stop the ATLASOPS servers started by start.sh
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

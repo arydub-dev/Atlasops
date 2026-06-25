@@ -12,7 +12,6 @@ import {
   FileSpreadsheet,
   FileText,
   FlaskConical,
-  Hexagon,
   type LucideIcon,
   Plug,
   Radar,
@@ -25,6 +24,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/constants";
+import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -54,13 +54,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="flex h-full w-64 flex-col border-r border-border bg-card/40">
       <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Hexagon className="h-5 w-5" />
-        </div>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold tracking-tight">SupplyChain</p>
-          <p className="text-[11px] text-muted-foreground">Command Center</p>
-        </div>
+        <Logo />
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto p-3">

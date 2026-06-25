@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for the SupplyChain Command Center."""
+"""SQLAlchemy ORM models for ATLASOPS."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

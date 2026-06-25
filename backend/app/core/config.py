@@ -14,12 +14,12 @@ class Settings(BaseSettings):
     )
 
     # --- App ---
-    APP_NAME: str = "SupplyChain Command Center"
+    APP_NAME: str = "ATLASOPS"
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg://scc:scc_password@localhost:5432/scc"
+    DATABASE_URL: str = "postgresql+psycopg://atlasops:atlasops@localhost:5432/atlasops"
 
     # --- Auth ---
     JWT_SECRET_KEY: str = "change-me-in-production-please-32chars-min"

@@ -47,9 +47,9 @@ def _token(client: TestClient, email: str, password: str) -> str:
 
 @pytest.fixture()
 def ops_headers(client):
-    return {"Authorization": f"Bearer {_token(client, 'ops@scc.io', 'ops12345')}"}
+    return {"Authorization": f"Bearer {_token(client, 'ops@atlasops.io', 'ops12345')}"}
 
 
 @pytest.fixture()
 def analyst_headers(client):
-    return {"Authorization": f"Bearer {_token(client, 'analyst@scc.io', 'analyst123')}"}
+    return {"Authorization": f"Bearer {_token(client, 'analyst@atlasops.io', 'analyst123')}"}
