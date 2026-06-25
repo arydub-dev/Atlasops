@@ -9,6 +9,8 @@ erDiagram
     USERS ||--o{ AUDIT_LOGS : performs
     USERS ||--o{ AI_REPORTS : requests
     USERS ||--o{ SIMULATIONS : creates
+    USERS ||--o{ IMPORT_JOBS : runs
+    DATA_SOURCES ||--o{ IMPORT_JOBS : produces
 
     SUPPLIERS ||--o{ PRODUCTS : supplies
     SUPPLIERS ||--o{ SHIPMENTS : fulfills
@@ -156,6 +158,38 @@ erDiagram
         string ip_address
         datetime created_at
     }
+    DATA_SOURCES {
+        int id PK
+        string name
+        enum connector_type
+        enum status
+        enum health
+        string base_url
+        string auth_method
+        string api_key_masked
+        string sync_frequency
+        int record_count
+        datetime last_sync_at
+        bool is_active
+    }
+    IMPORT_JOBS {
+        int id PK
+        string source_name
+        string source_type
+        string entity_type
+        enum status
+        int rows_processed
+        int rows_imported
+        int rows_rejected
+        int duration_ms
+        json error_summary
+        int user_id FK
+        datetime created_at
+    }
+    APP_SETTINGS {
+        string key PK
+        string value
+    }
 ```
 
 ## Tables
@@ -172,8 +206,11 @@ erDiagram
 | `alerts` | Generated operational alerts with lifecycle (open → acknowledged → resolved) |
 | `risk_assessments` | Risk-engine output (0–100 score, level, recommendation, factors) |
 | `simulations` | Saved scenario simulations and their computed impacts |
-| `ai_reports` | AI advisor conversations + the data context used |
+| `ai_reports` | Operations Copilot conversations + the data context used |
 | `audit_logs` | Audit trail of sensitive actions |
+| `data_sources` | Connected Mode connectors: type, status, health, sync metadata |
+| `import_jobs` | History of CSV/Excel/connector ingestion runs and outcomes |
+| `app_settings` | Key/value application settings (e.g. operating mode) |
 
 ## Constraints & indexes (highlights)
 

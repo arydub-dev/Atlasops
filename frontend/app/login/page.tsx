@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, Hexagon, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/lib/auth";
 import { DEMO_CREDENTIALS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,7 @@ import { Label } from "@/components/ui/label";
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("ops@scc.io");
+  const [email, setEmail] = useState("ops@atlasops.io");
   const [password, setPassword] = useState("ops12345");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -39,23 +41,17 @@ export default function LoginPage() {
       {/* Brand / marketing panel */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/15 via-background to-background p-12 lg:flex">
         <div className="absolute inset-0 grid-bg opacity-40" />
-        <div className="relative flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Hexagon className="h-6 w-6" />
-          </div>
-          <div className="leading-tight">
-            <p className="font-semibold">SupplyChain</p>
-            <p className="text-sm text-muted-foreground">Command Center</p>
-          </div>
-        </div>
+        <Link href="/" className="relative inline-flex">
+          <Logo />
+        </Link>
 
         <div className="relative space-y-6">
           <h1 className="max-w-md text-4xl font-semibold leading-tight tracking-tight">
-            The control tower for modern supply chain operations.
+            Operational intelligence for modern supply chains.
           </h1>
           <p className="max-w-md text-muted-foreground">
             Real-time shipment visibility, inventory intelligence, supplier scorecards, risk
-            scoring, disruption simulation and an AI advisor — in one operations center.
+            scoring, disruption simulation and an Operations Copilot — in one platform.
           </p>
           <div className="grid max-w-md gap-3 pt-2">
             {[
@@ -74,7 +70,7 @@ export default function LoginPage() {
         </div>
 
         <p className="relative text-xs text-muted-foreground">
-          © {new Date().getFullYear()} SupplyChain Command Center — Enterprise Operations Platform
+          © {new Date().getFullYear()} ATLASOPS — Operational Intelligence Platform
         </p>
       </div>
 
@@ -82,12 +78,9 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-2 lg:hidden">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Hexagon className="h-5 w-5" />
-              </div>
-              <p className="font-semibold">SupplyChain Command Center</p>
-            </div>
+            <Link href="/" className="inline-flex">
+              <Logo />
+            </Link>
           </div>
 
           <div className="space-y-1">

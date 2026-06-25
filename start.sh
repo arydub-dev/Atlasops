@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SupplyChain Command Center — single combined launcher (backend + frontend).
+# ATLASOPS — single combined launcher (backend + frontend).
 # Usage:  ./start.sh        then open http://127.0.0.1:3000
 set -euo pipefail
 
@@ -73,7 +73,7 @@ for i in $(seq 1 60); do
     echo "  ✅ Frontend : $FRONTEND_URL"
     echo
     echo "  Open $FRONTEND_URL and sign in:"
-    echo "    ops@scc.io / ops12345   (Operations Manager)"
+    echo "    ops@atlasops.io / ops12345   (Operations Manager)"
     echo
     echo "  Logs:  .run/backend.log  .run/frontend.log"
     echo "  Stop:  ./stop.sh"

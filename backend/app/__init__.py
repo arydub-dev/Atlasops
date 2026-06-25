@@ -1,3 +1,3 @@
-"""SupplyChain Command Center - FastAPI backend."""
+"""ATLASOPS - FastAPI backend."""
 
 __version__ = "1.0.0"

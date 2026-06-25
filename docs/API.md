@@ -18,7 +18,7 @@ Interactive docs (OpenAPI): **`/docs`** (Swagger UI) and **`/redoc`**. Machine-r
 # Login
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=ops@scc.io&password=ops12345"
+  -d "username=ops@atlasops.io&password=ops12345"
 
 # Authenticated request
 curl http://localhost:8000/api/v1/dashboard \

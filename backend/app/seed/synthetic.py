@@ -70,10 +70,10 @@ CITIES = [
 ]
 
 DEFAULT_USERS = [
-    ("admin@scc.io", "Avery Admin", UserRole.ADMIN, "admin1234"),
-    ("ops@scc.io", "Morgan Ops", UserRole.OPERATIONS_MANAGER, "ops12345"),
-    ("analyst@scc.io", "Riley Analyst", UserRole.ANALYST, "analyst123"),
-    ("exec@scc.io", "Jordan Exec", UserRole.EXECUTIVE, "exec12345"),
+    ("admin@atlasops.io", "Avery Admin", UserRole.ADMIN, "admin1234"),
+    ("ops@atlasops.io", "Morgan Ops", UserRole.OPERATIONS_MANAGER, "ops12345"),
+    ("analyst@atlasops.io", "Riley Analyst", UserRole.ANALYST, "analyst123"),
+    ("exec@atlasops.io", "Jordan Exec", UserRole.EXECUTIVE, "exec12345"),
 ]
 
 

@@ -1,20 +1,20 @@
-name: supplychain-command-center
+name: atlasops
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: scc-postgres
+    container_name: atlasops-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-scc}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scc_password}
-      POSTGRES_DB: ${POSTGRES_DB:-scc}
+      POSTGRES_USER: ${POSTGRES_USER:-atlasops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlasops}
+      POSTGRES_DB: ${POSTGRES_DB:-atlasops}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scc} -d ${POSTGRES_DB:-scc}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atlasops} -d ${POSTGRES_DB:-atlasops}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,13 +23,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: scc-backend
+    container_name: atlasops-backend
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-scc}:${POSTGRES_PASSWORD:-scc_password}@db:5432/${POSTGRES_DB:-scc}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-atlasops}:${POSTGRES_PASSWORD:-atlasops}@db:5432/${POSTGRES_DB:-atlasops}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production-please-32chars-min}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
@@ -51,7 +51,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    container_name: scc-frontend
+    container_name: atlasops-frontend
     restart: unless-stopped
     depends_on:
       - backend

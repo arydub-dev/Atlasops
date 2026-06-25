@@ -1,6 +1,20 @@
+# ---- Environment & secrets ----
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials.json
+
 # ---- Python / Backend ----
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .eggs/
 .venv/
@@ -9,8 +23,16 @@ env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.sqlite3
+.coverage
+coverage.xml
+htmlcov/
+.python-version
+
+# ---- Databases / local data ----
 *.db
+*.sqlite
+*.sqlite3
+postgres-data/
 
 # ---- Node / Frontend ----
 node_modules/
@@ -25,31 +47,23 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ---- Env / Secrets ----
-.env
-.env.local
-.env.*.local
-backend/.env
-frontend/.env
-frontend/.env.local
+# ---- Logs & temp ----
+*.log
+logs/
+tmp/
+temp/
+*.tmp
 
-# ---- Editor / OS ----
+# ---- Editor / IDE / tooling metadata ----
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
+.cursor/
 *.swp
-Thumbs.db
+*.swo
 
-# ---- Docker / Data ----
-postgres-data/
-*.log
-coverage/
-
-# ---- Local runtime (pids/logs from start.sh) ----
+# ---- Local runtime & toolchain (start.sh, bootstrap envs) ----
 .run/
-
-# local smoke/test toolchain
 backend/.bootstrap/
 backend/.uvpython/
-backend/.venv/
-backend/smoke.db

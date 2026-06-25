@@ -16,9 +16,28 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SupplyChain Command Center",
+  metadataBase: new URL("https://atlasops.io"),
+  title: {
+    default: "ATLASOPS — Operational Intelligence for Modern Supply Chains",
+    template: "%s · ATLASOPS",
+  },
   description:
-    "Enterprise supply chain control tower — real-time visibility, risk intelligence, scenario simulation and AI-powered operational decision support.",
+    "ATLASOPS is a cloud-based operational intelligence platform that unifies operational data, monitors risk, coordinates decisions, and turns fragmented supply chain information into actionable intelligence.",
+  keywords: [
+    "supply chain",
+    "operational intelligence",
+    "risk monitoring",
+    "ERP integration",
+    "control tower",
+    "enterprise SaaS",
+  ],
+  openGraph: {
+    title: "ATLASOPS — Operational Intelligence for Modern Supply Chains",
+    description:
+      "Unify operational data, monitor risk, coordinate decisions, and transform fragmented supply chain information into actionable intelligence.",
+    type: "website",
+    siteName: "ATLASOPS",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

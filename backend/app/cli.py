@@ -67,7 +67,7 @@ def create_user(email: str, name: str, role: str, password: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SCC backend CLI")
+    parser = argparse.ArgumentParser(description="ATLASOPS backend CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init-db", help="Create database tables")
