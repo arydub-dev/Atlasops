@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
@@ -41,9 +40,7 @@ export default function LoginPage() {
       {/* Brand / marketing panel */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-primary/15 via-background to-background p-12 lg:flex">
         <div className="absolute inset-0 grid-bg opacity-40" />
-        <Link href="/" className="relative inline-flex">
-          <Logo />
-        </Link>
+        <Logo className="relative" />
 
         <div className="relative space-y-6">
           <h1 className="max-w-md text-4xl font-semibold leading-tight tracking-tight">
@@ -78,9 +75,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-2 lg:hidden">
-            <Link href="/" className="inline-flex">
-              <Logo />
-            </Link>
+            <Logo />
           </div>
 
           <div className="space-y-1">

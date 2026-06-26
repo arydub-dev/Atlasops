@@ -36,8 +36,8 @@ const WORKSPACES = [
     badge: "Bring your data",
     desc: "Start with empty states and build your operational picture from your systems.",
     features: [
-      "Import via CSV & Excel",
-      "Configure connector templates",
+      "Import via CSV & Excel (self-serve)",
+      "Connect SAP, Oracle, Salesforce & more",
       "Monitor pipelines & sync status",
     ],
   },

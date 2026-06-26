@@ -89,9 +89,14 @@ export default function ConnectorsPage() {
         </div>
       )}
 
-      {/* Available templates */}
+      {/* Available integrations */}
       <div className="space-y-3">
-        <h2 className="section-label">Available Integration Templates</h2>
+        <h2 className="section-label">Available Integrations</h2>
+        <p className="text-sm text-muted-foreground">
+          Connect SAP, Oracle, Salesforce, Microsoft Dynamics, your WMS/TMS and
+          any REST API. CSV and Excel import are self-serve; enterprise systems
+          are connected with help from our team during onboarding.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(integrations ?? []).map((i) => (
             <Card key={i.type} className="flex flex-col p-5">

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 import { useDemoMode } from "@/lib/demo-mode";
+import { WORLD_FEATURES, type LandGeometry } from "@/lib/world-map";
 import type { NetworkData, NetworkNode } from "@/lib/types";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -32,6 +33,35 @@ function project(lat: number, lon: number): [number, number] {
   const y = ((90 - lat) / 180) * H;
   return [x, y];
 }
+
+// Build an SVG path from a GeoJSON ring, breaking the line where a polygon
+// crosses the antimeridian so it doesn't draw a seam across the whole map.
+function ringToPath(ring: [number, number][]): string {
+  let d = "";
+  let prevLon: number | null = null;
+  for (let i = 0; i < ring.length; i++) {
+    const [lon, lat] = ring[i];
+    const [x, y] = project(lat, lon);
+    const cmd =
+      i === 0 || (prevLon !== null && Math.abs(lon - prevLon) > 180) ? "M" : "L";
+    d += `${cmd}${x.toFixed(1)} ${y.toFixed(1)}`;
+    prevLon = lon;
+  }
+  return d;
+}
+
+function geometryToPath(geom: LandGeometry | null): string {
+  if (!geom) return "";
+  if (geom.type === "Polygon") return geom.coordinates.map(ringToPath).join("");
+  if (geom.type === "MultiPolygon")
+    return geom.coordinates.map((poly) => poly.map(ringToPath).join("")).join("");
+  return "";
+}
+
+// Precompute landmass paths once — these never change.
+const WORLD_PATHS: string[] = WORLD_FEATURES.map((f) =>
+  geometryToPath(f.geometry),
+).filter(Boolean);
 
 function routeColor(rate: number): string {
   if (rate >= 40) return "#ef4444";
@@ -144,11 +174,27 @@ export default function NetworkPage() {
               <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
                 {/* graticule */}
                 {[...Array(11)].map((_, i) => (
-                  <line key={`v${i}`} x1={(i * W) / 10} y1={0} x2={(i * W) / 10} y2={H} stroke="hsl(var(--border))" strokeWidth={0.4} opacity={0.5} />
+                  <line key={`v${i}`} x1={(i * W) / 10} y1={0} x2={(i * W) / 10} y2={H} stroke="hsl(var(--border))" strokeWidth={0.4} opacity={0.4} />
                 ))}
                 {[...Array(7)].map((_, i) => (
-                  <line key={`h${i}`} x1={0} y1={(i * H) / 6} x2={W} y2={(i * H) / 6} stroke="hsl(var(--border))" strokeWidth={0.4} opacity={0.5} />
+                  <line key={`h${i}`} x1={0} y1={(i * H) / 6} x2={W} y2={(i * H) / 6} stroke="hsl(var(--border))" strokeWidth={0.4} opacity={0.4} />
                 ))}
+
+                {/* world landmasses */}
+                <g>
+                  {WORLD_PATHS.map((d, i) => (
+                    <path
+                      key={`land${i}`}
+                      d={d}
+                      fill="hsl(var(--foreground))"
+                      fillOpacity={0.06}
+                      stroke="hsl(var(--foreground))"
+                      strokeOpacity={0.14}
+                      strokeWidth={0.5 / zoom}
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </g>
 
                 {/* delay hotspots */}
                 {data.hotspots.map((h, i) => {

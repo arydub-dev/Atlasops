@@ -45,8 +45,8 @@ const TIERS = [
     features: [
       "Everything in Demo",
       "Connect your own data sources",
-      "CSV & Excel ingestion",
-      "Connector templates (ERP, CRM, WMS, TMS)",
+      "Self-serve CSV & Excel ingestion",
+      "Connect ERP, CRM, WMS, TMS & REST APIs",
       "Pipeline monitoring & data lineage",
       "Role-based access control",
     ],
@@ -77,7 +77,7 @@ const FAQ = [
   },
   {
     q: "What data sources can I connect?",
-    a: "CSV and Excel ingestion are fully supported today. Connector templates provide a foundation for ERP, CRM, WMS, TMS and generic REST APIs.",
+    a: "Import from CSV and Excel yourself, or connect enterprise systems — SAP, Oracle, Salesforce, Microsoft Dynamics, your WMS/TMS and any REST API. CSV and Excel are self-serve; our team helps you connect enterprise systems during onboarding.",
   },
   {
     q: "How is access controlled?",
