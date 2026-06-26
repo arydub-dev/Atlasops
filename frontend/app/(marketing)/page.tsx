@@ -347,21 +347,21 @@ export default function LandingPage() {
             <div>
               <Eyebrow>Integrations</Eyebrow>
               <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                An extensible enterprise integration framework
+                Connect ATLASOPS to the systems you already run
               </h2>
               <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
-                CSV and Excel ingestion are fully supported today. Connector
-                templates provide a foundation for integrating enterprise
-                platforms, and the architecture is designed to support enterprise
-                integration patterns — connection health, sync status, validation,
-                transformation and pipeline monitoring.
+                Integrate with SAP, Oracle, Salesforce, Microsoft Dynamics, your
+                warehouse and transportation systems, and any REST API. CSV and
+                Excel import are available self-serve; for enterprise systems, our
+                team works with you to connect your data — with full connection
+                health, validation, transformation and pipeline monitoring.
               </p>
               <ul className="mt-6 space-y-3">
                 {[
-                  "Connection health & last-sync visibility",
+                  "Connect ERP, CRM, WMS, TMS and REST APIs",
+                  "Self-serve CSV & Excel import",
                   "Validation, transformation & data lineage",
                   "Pipeline monitoring across every source",
-                  "Records imported & synchronization status",
                 ].map((t) => (
                   <li
                     key={t}
@@ -372,10 +372,13 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-8">
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <PrimaryButton href="/integrations">
                   View integrations
                 </PrimaryButton>
+                <SecondaryButton href="/get-started">
+                  Talk to us to connect
+                </SecondaryButton>
               </div>
             </div>
 

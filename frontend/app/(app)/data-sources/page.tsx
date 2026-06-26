@@ -189,7 +189,7 @@ export default function DataSourcesPage() {
           ))}
           {available.length === 0 && (
             <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
-              All integration templates are configured.
+              All available integrations are configured.
             </p>
           )}
         </CardContent>

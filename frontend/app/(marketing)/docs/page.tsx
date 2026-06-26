@@ -42,7 +42,7 @@ const SECTIONS = [
   {
     icon: Cable,
     title: "Integrations",
-    body: "CSV & Excel ingestion, connector templates, and the ingestion pipeline.",
+    body: "Self-serve CSV & Excel ingestion, enterprise connectors, and the ingestion pipeline.",
     href: "/integrations",
   },
   {

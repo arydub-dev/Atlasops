@@ -43,8 +43,8 @@ export function Logo({
   textClassName?: string;
   href?: string | null;
 }) {
-  const content = (
-    <span className={cn("flex items-center gap-2.5", className)}>
+  const inner = (
+    <>
       <LogoMark className="h-8 w-8" />
       <span
         className={cn(
@@ -54,13 +54,17 @@ export function Logo({
       >
         ATLAS<span className="text-primary">OPS</span>
       </span>
-    </span>
+    </>
   );
 
-  if (href === null) return content;
+  const base = "inline-flex items-center gap-2.5";
+
+  if (href === null) {
+    return <span className={cn(base, className)}>{inner}</span>;
+  }
   return (
-    <Link href={href} className="inline-flex">
-      {content}
+    <Link href={href} className={cn(base, className)}>
+      {inner}
     </Link>
   );
 }

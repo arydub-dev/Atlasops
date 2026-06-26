@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   CheckCircle2,
   Database,
@@ -18,6 +19,7 @@ import {
   CTASection,
   Eyebrow,
   PageHero,
+  PrimaryButton,
   Section,
   SectionHeading,
 } from "@/components/marketing/ui";
@@ -26,28 +28,28 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Integrations",
   description:
-    "ATLASOPS provides an extensible enterprise integration framework: CSV and Excel ingestion plus connector templates for ERP, CRM, WMS, TMS and REST APIs.",
+    "Connect ATLASOPS with SAP, Oracle, Salesforce, Microsoft Dynamics, WMS, TMS and any REST API, plus self-serve CSV and Excel import.",
 };
 
 const CONNECTORS: {
   name: string;
   kind: string;
-  status: "Supported" | "Template" | "Template";
+  status: "Self-serve" | "Available";
   note: string;
 }[] = [
-  { name: "CSV Import", kind: "File", status: "Supported", note: "Drag-and-drop, mapping, validation" },
-  { name: "Excel Import", kind: "File", status: "Supported", note: "Worksheet selection & mapping" },
-  { name: "REST API", kind: "API", status: "Template", note: "Generic connector framework" },
-  { name: "SAP S/4HANA", kind: "ERP", status: "Template", note: "Connector template" },
-  { name: "Oracle ERP", kind: "ERP", status: "Template", note: "Connector template" },
-  { name: "Salesforce", kind: "CRM", status: "Template", note: "Connector template" },
-  { name: "Microsoft Dynamics", kind: "ERP/CRM", status: "Template", note: "Connector template" },
-  { name: "Warehouse Mgmt (WMS)", kind: "WMS", status: "Template", note: "Connector template" },
-  { name: "Transportation Mgmt (TMS)", kind: "TMS", status: "Template", note: "Connector template" },
+  { name: "CSV Import", kind: "File", status: "Self-serve", note: "Drag-and-drop, mapping, validation" },
+  { name: "Excel Import", kind: "File", status: "Self-serve", note: "Worksheet selection & mapping" },
+  { name: "REST API", kind: "API", status: "Available", note: "Connect any RESTful endpoint" },
+  { name: "SAP S/4HANA", kind: "ERP", status: "Available", note: "Connect with our team" },
+  { name: "Oracle ERP", kind: "ERP", status: "Available", note: "Connect with our team" },
+  { name: "Salesforce", kind: "CRM", status: "Available", note: "Connect with our team" },
+  { name: "Microsoft Dynamics", kind: "ERP/CRM", status: "Available", note: "Connect with our team" },
+  { name: "Warehouse Mgmt (WMS)", kind: "WMS", status: "Available", note: "Connect with our team" },
+  { name: "Transportation Mgmt (TMS)", kind: "TMS", status: "Available", note: "Connect with our team" },
 ];
 
 const PIPELINE = [
-  { icon: Plug, title: "Connector Layer", body: "Files, APIs and connector templates bring data in from external systems." },
+  { icon: Plug, title: "Connector Layer", body: "Files, APIs and enterprise connectors bring data in from external systems." },
   { icon: ShieldCheck, title: "Validation Layer", body: "Rows are type-checked, required fields enforced and errors reported clearly." },
   { icon: Workflow, title: "Transformation Layer", body: "Field mapping and reference resolution shape data into the unified model." },
   { icon: RefreshCw, title: "Synchronization", body: "Sync status, records imported and pipeline runs are tracked end to end." },
@@ -67,22 +69,26 @@ export default function IntegrationsPage() {
     <>
       <PageHero
         eyebrow="Integrations"
-        title="An extensible enterprise integration framework"
-        description="Connect the systems you already run. CSV and Excel ingestion are fully supported today, and connector templates provide a foundation for integrating enterprise platforms."
-      />
+        title="Connect ATLASOPS to the systems you already run"
+        description="Integrate with SAP, Oracle, Salesforce, Microsoft Dynamics, your warehouse and transportation systems, and any REST API. Import from CSV and Excel yourself, and connect enterprise systems with help from our team."
+      >
+        <PrimaryButton href="/get-started">Talk to us to connect</PrimaryButton>
+      </PageHero>
 
-      {/* Honest capability note */}
+      {/* Capability note */}
       <Section className="pb-0">
         <Container>
           <Reveal className="mx-auto flex max-w-3xl items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-5">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <p className="text-sm leading-relaxed text-foreground">
-              ATLASOPS is designed to support enterprise integration patterns.
-              CSV and Excel ingestion are fully implemented. Enterprise
-              connectors are provided as configurable templates — they are not
-              represented as production-certified, turnkey integrations. The
-              architecture is built so those integrations can be implemented
-              against a consistent ingestion model.
+              CSV and Excel import are available self-serve — upload your data and
+              start immediately. Enterprise integrations (SAP, Oracle, Salesforce,
+              Microsoft Dynamics, WMS, TMS and REST APIs) are connected through a
+              guided onboarding with our team, who configure authentication,
+              endpoints and field mapping for your environment.{" "}
+              <Link href="/get-started" className="font-medium text-primary hover:underline">
+                Get in touch to connect your systems.
+              </Link>
             </p>
           </Reveal>
         </Container>
@@ -119,9 +125,9 @@ export default function IntegrationsPage() {
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                      c.status === "Supported"
+                      c.status === "Self-serve"
                         ? "bg-success/10 text-success"
-                        : "bg-muted text-muted-foreground",
+                        : "bg-primary/10 text-primary",
                     )}
                   >
                     {c.status}
