@@ -95,6 +95,19 @@ Wait for DNS to propagate; Render auto-provisions TLS certificates.
 
 ---
 
+## Troubleshooting
+
+- **`failed to read dockerfile: open Dockerfile: no such file or directory`**
+  Render looked for the Dockerfile at the repo root. This blueprint sets
+  `dockerfilePath`/`dockerContext` to the `backend/` and `frontend/`
+  subdirectories (paths are relative to the **repo root**), which resolves it.
+  If you created the services manually instead of via the Blueprint, set each
+  service's **Dockerfile Path** to `backend/Dockerfile` / `frontend/Dockerfile`
+  in **Settings**.
+- **Applying blueprint changes:** When you push an updated `render.yaml`, open
+  the Blueprint in Render and **Sync** (or **Apply**) so the new settings take
+  effect on the existing services, then trigger a redeploy.
+
 ## Notes & tips
 
 - **Free tier cold starts:** Free Render services sleep after ~15 minutes of
