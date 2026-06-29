@@ -1,5 +1,12 @@
+// Resolution order:
+//  1. Explicit NEXT_PUBLIC_API_URL (e.g. a separate backend host on Render).
+//  2. Local development -> the backend dev server on :8000.
+//  3. Production with no explicit URL -> same-origin ("" base), so requests go
+//     to "/api/v1/..." on the current domain. This is how the all-in-one Vercel
+//     deployment works, where the FastAPI service is mounted under "/api".
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
 const API_PREFIX = "/api/v1";
 

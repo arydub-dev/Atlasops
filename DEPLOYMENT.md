@@ -1,18 +1,103 @@
-# Deploying ATLASOPS on Render
+# Deploying ATLASOPS
 
 ATLASOPS is a three-part system: a **PostgreSQL** database, a **FastAPI** backend,
-and a **Next.js** frontend. The included [`render.yaml`](./render.yaml) Blueprint
-provisions all three in one step.
+and a **Next.js** frontend.
 
 ```
 ┌────────────┐      HTTPS      ┌──────────────┐      SQL      ┌──────────────┐
 │  Next.js   │ ─────────────▶  │   FastAPI    │ ───────────▶  │  PostgreSQL  │
-│ atlasops-  │  NEXT_PUBLIC_   │  atlasops-   │  DATABASE_URL │  atlasops-db │
-│   web      │     API_URL     │    api       │               │              │
+│  frontend  │   /api/v1/...   │   backend    │  DATABASE_URL │   database   │
 └────────────┘                 └──────────────┘               └──────────────┘
 ```
 
+You can deploy it two ways:
+
+- **[Option A — All-in-one on Vercel](#option-a--all-in-one-on-vercel)**: frontend
+  and backend in a single Vercel project (Vercel "Services"), plus a managed
+  Postgres add-on.
+- **[Option B — Render](#option-b--render-blueprint)**: one Blueprint that
+  provisions Postgres + backend + frontend together (includes the database).
+
 ---
+
+# Option A — All-in-one on Vercel
+
+The repo includes [`vercel.json`](./vercel.json), which uses Vercel
+[Services](https://vercel.com/docs/services) to run the Next.js frontend at `/`
+and the FastAPI backend at `/api` in the **same project and domain**. Because
+they share an origin, the frontend talks to the backend at `/api/v1/...` with no
+CORS configuration and no separate backend URL to manage.
+
+Vercel does not host a database, so you add a managed Postgres in a couple of
+clicks.
+
+### 1. Create the project
+
+1. In Vercel, **Add New → Project** and import `arydub-dev/Atlasops`.
+2. Leave **Root Directory** as the repository root (`./`). Vercel reads
+   `vercel.json`, detects the **Services** preset, and shows two services:
+   `web` (Next.js) and `api` (FastAPI).
+3. Don't deploy yet — add the database first (next step).
+
+### 2. Add a Postgres database
+
+1. In the project, go to **Storage → Create Database → Postgres** (Neon-backed),
+   or add **Neon**/**Supabase** from the Marketplace.
+2. Connect it to the project for the **Production** environment. This injects the
+   connection string env vars automatically (`DATABASE_URL` / `POSTGRES_URL` /
+   `POSTGRES_URL_NON_POOLING`). The backend reads whichever is present and
+   normalizes the driver — no manual editing needed.
+
+### 3. Set environment variables (backend)
+
+On the project's **Environment Variables**:
+
+| Key | Value |
+| --- | --- |
+| `JWT_SECRET_KEY` | a long random string (32+ chars) |
+| `ENVIRONMENT` | `production` |
+| `SEED_ON_STARTUP` | `true` (seeds demo data + logins on first request) |
+| `OPENAI_API_KEY` | *(optional — enables OpenAI Copilot; otherwise local advisor)* |
+
+`NEXT_PUBLIC_API_URL` is **not needed** — the frontend calls the backend on the
+same origin automatically. `CORS_ORIGINS` is also unnecessary (same origin).
+
+### 4. Deploy & verify
+
+1. Click **Deploy**.
+2. Open the deployment URL. The first load triggers a backend cold start that
+   seeds the demo dataset (give it a few seconds).
+3. **Login** with a demo account: `ops@atlasops.io` / `ops12345`.
+
+### 5. Custom `.online` domain
+
+1. Project → **Settings → Domains → Add** → enter `atlasops.online` (and
+   `www.atlasops.online`).
+2. Add the DNS records Vercel shows at your registrar, typically:
+
+   | Type | Name | Value |
+   | --- | --- | --- |
+   | `A` | `@` | `76.76.21.21` |
+   | `CNAME` | `www` | `cname.vercel-dns.com` |
+
+   Use the exact values Vercel displays. Both frontend and backend live on this
+   one domain (`/` and `/api`), so no extra DNS is needed for the API.
+
+### Notes (Vercel)
+
+- The backend runs as serverless functions (no Docker). The engine uses no
+  connection pooling on Vercel and disables psycopg prepared statements so it
+  works through Postgres poolers.
+- The `backend/Dockerfile` and `render.yaml` are unused on Vercel; they remain
+  for the Render path below.
+- Hobby plan functions cap at 60s — enough for the trimmed first-boot seed.
+
+---
+
+# Option B — Render (Blueprint)
+
+The included [`render.yaml`](./render.yaml) Blueprint provisions Postgres +
+backend + frontend together (the database is included, unlike Vercel).
 
 ## 1. Deploy with the Blueprint
 

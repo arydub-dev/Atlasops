@@ -60,7 +60,11 @@ def _bootstrap() -> None:
         try:
             if settings.SEED_ON_STARTUP and not synthetic.is_seeded(db):
                 logger.info("Empty database detected — seeding demo dataset...")
-                counts = synthetic.seed_all(db, verbose=False)
+                # Keep history light so the seed completes within serverless
+                # execution limits on the first cold start.
+                counts = synthetic.seed_all(
+                    db, inventory_history_snapshots=12, verbose=False
+                )
                 logger.info("Seed complete: %s", counts)
             created = ingestion.seed_data_sources(db)
             if created:
