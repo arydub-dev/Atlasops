@@ -137,6 +137,16 @@ def seed_all(
     return counts
 
 
+def seed_users(db: Session) -> int:
+    """Public, idempotent entrypoint to ensure the demo accounts exist.
+
+    Safe to call repeatedly — existing accounts are skipped. Used by the admin
+    seed endpoint so login works even when startup seeding never ran (e.g. on
+    serverless platforms that don't fire ASGI lifespan events).
+    """
+    return _seed_users(db)
+
+
 def _seed_users(db: Session) -> int:
     created = 0
     for email, name, role, password in DEFAULT_USERS:
