@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Annotated, List
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -19,7 +19,20 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg://atlasops:atlasops@localhost:5432/atlasops"
+    # Managed Postgres providers inject the connection string under different
+    # names (Render: DATABASE_URL; Vercel Postgres: POSTGRES_URL*; Neon:
+    # DATABASE_URL_UNPOOLED). Accept the common ones, preferring a direct/
+    # non-pooled endpoint which plays nicest with short-lived serverless
+    # connections. The scheme is normalized to psycopg in core/database.py.
+    DATABASE_URL: str = Field(
+        default="postgresql+psycopg://atlasops:atlasops@localhost:5432/atlasops",
+        validation_alias=AliasChoices(
+            "DATABASE_URL",
+            "DATABASE_URL_UNPOOLED",
+            "POSTGRES_URL_NON_POOLING",
+            "POSTGRES_URL",
+        ),
+    )
 
     # --- Auth ---
     JWT_SECRET_KEY: str = "change-me-in-production-please-32chars-min"
