@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,25 +14,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("atlasops")
 
 
-def _effective_api_prefix() -> str:
-    """Return the prefix the API router should mount at.
+def _api_prefixes() -> list[str]:
+    """Return every prefix the API router should be mounted at.
 
     The frontend always calls ``/api/v1/...``. On most platforms (local, Docker,
     Render) the request reaches the app with that full path intact, so the router
-    mounts at ``settings.API_V1_PREFIX`` ("/api/v1").
+    must answer at ``settings.API_V1_PREFIX`` ("/api/v1").
 
     On Vercel the FastAPI service is mounted under the ``/api`` routePrefix and
     Vercel strips that segment before the request reaches the app — so the app
-    actually receives ``/v1/auth/login``. Drop the leading ``/api`` here so the
-    routes line up with the stripped path; otherwise every API call 404s.
+    actually receives ``/v1/auth/login``. To work in both worlds without relying
+    on platform-specific env detection, we also expose an aliased mount with the
+    leading ``/api`` removed (e.g. "/v1"). Whichever path the runtime delivers,
+    a matching route exists, so API calls never 404 due to prefix mismatch.
     """
     prefix = settings.API_V1_PREFIX
-    if os.environ.get("VERCEL") and prefix.startswith("/api"):
-        return prefix[len("/api") :] or "/"
-    return prefix
+    prefixes = [prefix]
+    if prefix.startswith("/api"):
+        stripped = prefix[len("/api") :] or "/"
+        if stripped != prefix:
+            prefixes.append(stripped)
+    return prefixes
 
 
-API_PREFIX = _effective_api_prefix()
+API_PREFIXES = _api_prefixes()
+API_PREFIX = API_PREFIXES[0]
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -55,7 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix=API_PREFIX)
+# Primary mount (shown in the OpenAPI schema). Any additional aliases are mounted
+# without schema entries to keep /docs clean while still serving requests.
+app.include_router(api_router, prefix=API_PREFIXES[0])
+for _alias in API_PREFIXES[1:]:
+    app.include_router(api_router, prefix=_alias, include_in_schema=False)
 
 
 @app.on_event("startup")
