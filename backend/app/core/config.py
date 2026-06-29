@@ -50,6 +50,12 @@ class Settings(BaseSettings):
 
     # --- Seeding ---
     SEED_ON_STARTUP: bool = False
+    # Optional shared secret for the admin seed endpoint. When set, callers must
+    # present it via the ``x-seed-token`` header. When empty, the endpoint only
+    # permits a one-time bootstrap on an empty database (and then self-disables),
+    # which is handy for first-run setup on platforms where startup seeding does
+    # not fire (e.g. serverless).
+    SEED_TOKEN: str = ""
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
