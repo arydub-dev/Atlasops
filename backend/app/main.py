@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,27 @@ from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("atlasops")
+
+
+def _effective_api_prefix() -> str:
+    """Return the prefix the API router should mount at.
+
+    The frontend always calls ``/api/v1/...``. On most platforms (local, Docker,
+    Render) the request reaches the app with that full path intact, so the router
+    mounts at ``settings.API_V1_PREFIX`` ("/api/v1").
+
+    On Vercel the FastAPI service is mounted under the ``/api`` routePrefix and
+    Vercel strips that segment before the request reaches the app — so the app
+    actually receives ``/v1/auth/login``. Drop the leading ``/api`` here so the
+    routes line up with the stripped path; otherwise every API call 404s.
+    """
+    prefix = settings.API_V1_PREFIX
+    if os.environ.get("VERCEL") and prefix.startswith("/api"):
+        return prefix[len("/api") :] or "/"
+    return prefix
+
+
+API_PREFIX = _effective_api_prefix()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -33,7 +55,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+app.include_router(api_router, prefix=API_PREFIX)
 
 
 @app.on_event("startup")
@@ -82,7 +104,7 @@ def root() -> dict:
         "version": __version__,
         "status": "ok",
         "docs": "/docs",
-        "api": settings.API_V1_PREFIX,
+        "api": API_PREFIX,
     }
 
 
