@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canOperateRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { RiskAssessment, RiskSummary } from "@/lib/types";
 import { titleCase } from "@/lib/format";
@@ -32,7 +32,7 @@ const LEVEL_COLOR: Record<string, string> = {
 };
 
 export default function RiskPage() {
-  const { user } = useAuth();
+  const { currentMembership } = useAuth();
   const [category, setCategory] = useState("all");
   const [level, setLevel] = useState("all");
   const [recomputing, setRecomputing] = useState(false);
@@ -47,8 +47,7 @@ export default function RiskPage() {
     [category, level]
   );
 
-  const canRecompute =
-    user?.role === "admin" || user?.role === "operations_manager" || user?.role === "analyst";
+  const canRecompute = canOperateRole(currentMembership?.role_slug);
 
   async function recompute() {
     setRecomputing(true);

@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import get_current_user, require_roles
-from app.core.database import get_db
-from app.models import AuditLog, Shipment, ShipmentEvent, Supplier, User, Warehouse
-from app.models.enums import ShipmentStatus, UserRole
+from app.api.deps import get_db_with_tenant, require_permission
+from app.models import AuditLog, Shipment, ShipmentEvent, Supplier, Warehouse
+from app.models.enums import ShipmentStatus
 from app.schemas.entities import (
     Page,
     ShipmentDetail,
@@ -18,6 +18,7 @@ from app.schemas.entities import (
     ShipmentOut,
     ShipmentStatusUpdate,
 )
+from app.tenancy.context import TenantContext
 
 router = APIRouter(prefix="/shipments", tags=["Shipments"])
 
@@ -33,18 +34,18 @@ _SORTABLE = {
 
 @router.get("", response_model=Page[ShipmentOut])
 def list_shipments(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("shipments.read")),
     q: str | None = Query(None, description="Search reference, origin, destination, carrier, location"),
     status_filter: ShipmentStatus | None = Query(None, alias="status"),
-    supplier_id: int | None = None,
-    warehouse_id: int | None = None,
+    supplier_id: UUID | None = None,
+    warehouse_id: UUID | None = None,
     sort_by: str = Query("eta"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ) -> Page[ShipmentOut]:
-    stmt = select(Shipment)
+    stmt = select(Shipment).where(Shipment.organization_id == ctx.organization_id)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(
@@ -81,15 +82,40 @@ def list_shipments(
 
 @router.get("/{shipment_id}", response_model=ShipmentDetail)
 def get_shipment(
-    shipment_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    shipment_id: UUID,
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("shipments.read")),
 ) -> ShipmentDetail:
-    shipment = db.get(Shipment, shipment_id)
+    shipment = db.scalar(
+        select(Shipment)
+        .options(selectinload(Shipment.events))
+        .where(
+            Shipment.id == shipment_id,
+            Shipment.organization_id == ctx.organization_id,
+        )
+    )
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
-    supplier = db.get(Supplier, shipment.supplier_id) if shipment.supplier_id else None
-    warehouse = db.get(Warehouse, shipment.warehouse_id) if shipment.warehouse_id else None
+    supplier = (
+        db.scalar(
+            select(Supplier).where(
+                Supplier.id == shipment.supplier_id,
+                Supplier.organization_id == ctx.organization_id,
+            )
+        )
+        if shipment.supplier_id
+        else None
+    )
+    warehouse = (
+        db.scalar(
+            select(Warehouse).where(
+                Warehouse.id == shipment.warehouse_id,
+                Warehouse.organization_id == ctx.organization_id,
+            )
+        )
+        if shipment.warehouse_id
+        else None
+    )
     events = sorted(shipment.events, key=lambda e: e.occurred_at, reverse=True)
     detail = ShipmentDetail.model_validate(shipment)
     detail.supplier_name = supplier.name if supplier else None
@@ -100,12 +126,17 @@ def get_shipment(
 
 @router.patch("/{shipment_id}/status", response_model=ShipmentDetail)
 def update_status(
-    shipment_id: int,
+    shipment_id: UUID,
     payload: ShipmentStatusUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OPERATIONS_MANAGER)),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("shipments.update")),
 ) -> ShipmentDetail:
-    shipment = db.get(Shipment, shipment_id)
+    shipment = db.scalar(
+        select(Shipment).where(
+            Shipment.id == shipment_id,
+            Shipment.organization_id == ctx.organization_id,
+        )
+    )
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
 
@@ -117,6 +148,7 @@ def update_status(
 
     db.add(
         ShipmentEvent(
+            organization_id=ctx.organization_id,
             shipment_id=shipment.id,
             status=payload.status,
             location=payload.current_location or shipment.current_location,
@@ -125,12 +157,14 @@ def update_status(
     )
     db.add(
         AuditLog(
-            user_id=user.id,
+            organization_id=ctx.organization_id,
+            user_id=ctx.user_id,
             action="update_status",
             resource="shipment",
+            resource_id=str(shipment.id),
             detail=f"{shipment.reference} -> {payload.status.value}",
         )
     )
     db.commit()
     db.refresh(shipment)
-    return get_shipment(shipment.id, db, user)
+    return get_shipment(shipment.id, db, ctx)

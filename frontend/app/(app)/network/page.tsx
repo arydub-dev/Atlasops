@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
   Factory,
+  GitBranch,
   Minus,
   Plus,
   Maximize2,
@@ -24,6 +26,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+
+const NetworkMapbox = dynamic(
+  () => import("@/components/network/network-mapbox").then((m) => m.NetworkMapbox),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[540px] w-full rounded-lg" />,
+  }
+);
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 const W = 1000;
 const H = 480;
@@ -86,13 +98,14 @@ export default function NetworkPage() {
   const [showRoutes, setShowRoutes] = useState(true);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
 
-  const nodes = data?.nodes ?? [];
   const edges = data?.edges ?? [];
+  const useMapbox = Boolean(MAPBOX_TOKEN);
+  const onSelect = useCallback((n: NetworkNode | null) => setSelected(n), []);
 
-  const visibleNodes = useMemo(
-    () => (showSuppliers ? nodes : nodes.filter((n) => n.type === "warehouse")),
-    [nodes, showSuppliers]
-  );
+  const visibleNodes = useMemo(() => {
+    const nodes = data?.nodes ?? [];
+    return showSuppliers ? nodes : nodes.filter((n) => n.type === "warehouse");
+  }, [data?.nodes, showSuppliers]);
 
   function onWheel(e: React.WheelEvent) {
     e.preventDefault();
@@ -132,17 +145,27 @@ export default function NetworkPage() {
         <Badge variant="secondary">{data.summary.warehouses} warehouses</Badge>
         <Badge variant="secondary">{data.summary.suppliers} suppliers</Badge>
         <Badge variant="secondary">{data.summary.active_routes} routes</Badge>
+        {useMapbox ? (
+          <Badge variant="success">Mapbox</Badge>
+        ) : (
+          <Badge variant="outline">SVG map</Badge>
+        )}
+        {data.overlays && (
+          <Badge variant="warning">{data.overlays.delayed_routes} delayed routes</Badge>
+        )}
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Map */}
         <Card className="relative overflow-hidden lg:col-span-9">
           {/* Controls */}
-          <div className="absolute right-3 top-3 z-20 flex flex-col gap-1.5">
-            <ControlBtn onClick={() => setZoom((z) => Math.min(6, z + 0.4))}><Plus className="h-4 w-4" /></ControlBtn>
-            <ControlBtn onClick={() => setZoom((z) => Math.max(0.8, z - 0.4))}><Minus className="h-4 w-4" /></ControlBtn>
-            <ControlBtn onClick={reset}><Maximize2 className="h-4 w-4" /></ControlBtn>
-          </div>
+          {!useMapbox && (
+            <div className="absolute right-3 top-3 z-20 flex flex-col gap-1.5">
+              <ControlBtn onClick={() => setZoom((z) => Math.min(6, z + 0.4))}><Plus className="h-4 w-4" /></ControlBtn>
+              <ControlBtn onClick={() => setZoom((z) => Math.max(0.8, z - 0.4))}><Minus className="h-4 w-4" /></ControlBtn>
+              <ControlBtn onClick={reset}><Maximize2 className="h-4 w-4" /></ControlBtn>
+            </div>
+          )}
 
           {/* Toggles + legend */}
           <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5">
@@ -153,9 +176,21 @@ export default function NetworkPage() {
             <LegendDot color="#22c55e" label="Low risk" />
             <LegendDot color="#f59e0b" label="Elevated" />
             <LegendDot color="#ef4444" label="High risk" />
-            <span className="text-muted-foreground">· scroll to zoom · drag to pan</span>
+            {!useMapbox && <span className="text-muted-foreground">· scroll to zoom · drag to pan</span>}
           </div>
 
+          {useMapbox ? (
+            <div className="h-[540px] w-full">
+              <NetworkMapbox
+                data={data}
+                token={MAPBOX_TOKEN}
+                selected={selected}
+                onSelect={onSelect}
+                showSuppliers={showSuppliers}
+                showRoutes={showRoutes}
+              />
+            </div>
+          ) : (
           <div
             className="grid-bg h-[540px] w-full cursor-grab active:cursor-grabbing"
             onWheel={onWheel}
@@ -252,6 +287,7 @@ export default function NetworkPage() {
               </g>
             </svg>
           </div>
+          )}
         </Card>
 
         {/* Detail panel */}
@@ -311,6 +347,11 @@ function NodeDetail({ node, onClose }: { node: NetworkNode; onClose: () => void 
           </>
         )}
         <div className="flex gap-2 pt-1">
+          <Link href={`/graph?type=${node.type}&id=${node.entity_id}`} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full">
+              <GitBranch className="h-3.5 w-3.5" /> Graph
+            </Button>
+          </Link>
           <Link href={isWh ? "/warehouses" : "/suppliers"} className="flex-1">
             <Button variant="outline" size="sm" className="w-full">
               {isWh ? "Warehouses" : "Suppliers"}

@@ -29,10 +29,6 @@ export function MarketingNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
   return (
     <header
       className={cn(
@@ -103,6 +99,7 @@ export function MarketingNav() {
             <Link
               key={l.href}
               href={l.href}
+              onClick={() => setOpen(false)}
               className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-accent"
             >
               {l.label}
@@ -111,12 +108,14 @@ export function MarketingNav() {
           <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
             <Link
               href="/login"
+              onClick={() => setOpen(false)}
               className="rounded-lg border border-border px-3 py-2.5 text-center text-sm font-medium"
             >
               Login
             </Link>
             <Link
               href="/get-started"
+              onClick={() => setOpen(false)}
               className="rounded-lg bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground"
             >
               Get Started

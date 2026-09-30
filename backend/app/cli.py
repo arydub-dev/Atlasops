@@ -1,100 +1,152 @@
-"""Command-line utilities for database lifecycle and seeding.
-
-Usage:
-    python -m app.cli init-db
-    python -m app.cli seed [--if-empty] [--scale demo|full]
-    python -m app.cli reset
-    python -m app.cli create-user EMAIL NAME ROLE PASSWORD
-"""
+"""Supply CLI — database init, migrations helper, sandbox seed, user bootstrap."""
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from app.core.database import Base, SessionLocal, engine
-from app.models import User  # noqa: F401  (ensures models are imported)
-from app.models.enums import UserRole
+from app.identity.orgs import create_organization
+from app.models import User
 
 
-def init_db() -> None:
-    import app.models  # noqa: F401  registers all tables
+def _alembic_config():
+    from alembic.config import Config
 
-    print("[cli] Creating tables (if not present)...", flush=True)
-    Base.metadata.create_all(bind=engine)
-    print("[cli] Done.", flush=True)
+    root = Path(__file__).resolve().parents[1]
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "alembic"))
+    return cfg
 
 
-def drop_db() -> None:
+def cmd_init_db(_: argparse.Namespace) -> None:
+    """Dev helper: create missing tables only. Prefer ``ensure-schema`` / Alembic."""
     import app.models  # noqa: F401
 
-    print("[cli] Dropping all tables...", flush=True)
-    Base.metadata.drop_all(bind=engine)
-    print("[cli] Done.", flush=True)
+    Base.metadata.create_all(bind=engine)
+    print("Schema created via create_all (dev only; prefer: python -m app.cli ensure-schema)")
 
 
-def seed(if_empty: bool, scale: str) -> None:
-    from app.seed import synthetic
+def cmd_ensure_schema(args: argparse.Namespace) -> None:
+    """Apply Alembic migrations to head.
+
+    Legacy local SQLite databases created with ``create_all`` (no alembic_version)
+    are stamped at ``0009_ensure_tenant_rls`` then upgraded so additive revisions
+    (e.g. ``0010`` adding ``connections.next_sync_at``) apply without a destructive
+    rebuild from revision ``0002``.
+    """
+    import sqlalchemy as sa
+    from alembic import command
+
+    cfg = _alembic_config()
+    inspector = sa.inspect(engine)
+    tables = set(inspector.get_table_names())
+    has_version = "alembic_version" in tables
+    has_app_schema = "organizations" in tables
+
+    if not has_version and has_app_schema:
+        print(
+            "Detected legacy create_all schema without alembic_version; "
+            "stamping 0009_ensure_tenant_rls then upgrading…"
+        )
+        command.stamp(cfg, "0009_ensure_tenant_rls")
+    elif not has_version and not has_app_schema:
+        print("Empty database — running alembic upgrade head…")
+    else:
+        print("Running alembic upgrade head…")
+
+    command.upgrade(cfg, "head")
+    print("Schema at alembic head.")
+
+
+def cmd_seed_sandbox(args: argparse.Namespace) -> None:
+    from app.seed.synthetic import seed_sandbox
 
     db = SessionLocal()
     try:
-        if if_empty and synthetic.is_seeded(db):
-            print("[cli] Database already seeded; skipping (--if-empty).", flush=True)
-            return
-        history = 39 if scale == "full" else 12
-        print(f"[cli] Seeding (scale={scale}, history_snapshots={history})...", flush=True)
-        counts = synthetic.seed_all(db, inventory_history_snapshots=history)
-        print(f"[cli] Seed complete: {counts}", flush=True)
+        result = seed_sandbox(db, owner_email=args.email, org_name=args.org)
+        print(result)
     finally:
         db.close()
 
 
-def create_user(email: str, name: str, role: str, password: str) -> None:
-    from app.core.security import hash_password
+def cmd_create_user(args: argparse.Namespace) -> None:
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.email == args.email.lower()).first()
+        if existing:
+            print(f"User already exists: {existing.id}")
+            user = existing
+        else:
+            user = User(email=args.email.lower(), full_name=args.name, is_active=True)
+            db.add(user)
+            db.flush()
+            print(f"Created user {user.id}")
+
+        if args.org:
+            org, membership = create_organization(db, name=args.org, owner=user)
+            print(f"Created org {org.slug} ({org.id}) membership={membership.role_slug}")
+        db.commit()
+    finally:
+        db.close()
+
+
+def cmd_force_disruption(args: argparse.Namespace) -> None:
+    """Overlay the demo disruption scenario onto an existing organization."""
+    from uuid import UUID
+
+    from app.models import Organization
+    from app.seed.synthetic import apply_disruption_scenario
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        user = User(
-            email=email.lower(),
-            full_name=name,
-            role=UserRole(role),
-            hashed_password=hash_password(password),
-        )
-        db.add(user)
+        org = db.scalar(select(Organization).where(Organization.id == UUID(args.org_id)))
+        if org is None:
+            org = db.scalar(select(Organization).where(Organization.name == args.org))
+        if org is None:
+            raise SystemExit(f"Organization not found: {args.org_id or args.org}")
+        result = apply_disruption_scenario(db, organization_id=org.id)
         db.commit()
-        print(f"[cli] Created user {email} ({role}).", flush=True)
+        print({"organization_id": str(org.id), **result})
     finally:
         db.close()
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ATLASOPS backend CLI")
+    parser = argparse.ArgumentParser(prog="supply")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("init-db", help="Create database tables")
-    sub.add_parser("reset", help="Drop and recreate all tables")
+    p_init = sub.add_parser("init-db", help="Create tables via create_all (dev only)")
+    p_init.set_defaults(func=cmd_init_db)
 
-    seed_p = sub.add_parser("seed", help="Generate synthetic data")
-    seed_p.add_argument("--if-empty", action="store_true", help="Only seed when empty")
-    seed_p.add_argument("--scale", choices=["demo", "full"], default="full")
+    p_ensure = sub.add_parser(
+        "ensure-schema",
+        help="Apply Alembic migrations (stamps legacy create_all DBs safely)",
+    )
+    p_ensure.set_defaults(func=cmd_ensure_schema)
 
-    user_p = sub.add_parser("create-user", help="Create a user")
-    user_p.add_argument("email")
-    user_p.add_argument("name")
-    user_p.add_argument("role", choices=[r.value for r in UserRole])
-    user_p.add_argument("password")
+    p_seed = sub.add_parser("seed-sandbox", help="Seed optional demo org (never for prod)")
+    p_seed.add_argument("--email", default="demo@example.com")
+    p_seed.add_argument("--org", default="Demo Manufacturing Co")
+    p_seed.set_defaults(func=cmd_seed_sandbox)
+
+    p_dx = sub.add_parser(
+        "force-disruption",
+        help="Overlay supplier-delay disruption on an existing demo org",
+    )
+    p_dx.add_argument("--org-id", default="", help="Organization UUID")
+    p_dx.add_argument("--org", default="Demo Manufacturing Co", help="Organization name fallback")
+    p_dx.set_defaults(func=cmd_force_disruption)
+
+    p_user = sub.add_parser("create-user", help="Create a user (WorkOS will link on login)")
+    p_user.add_argument("email")
+    p_user.add_argument("--name", default="User")
+    p_user.add_argument("--org", default=None, help="Also create an organization as owner")
+    p_user.set_defaults(func=cmd_create_user)
 
     args = parser.parse_args(argv)
-
-    if args.command == "init-db":
-        init_db()
-    elif args.command == "reset":
-        drop_db()
-        init_db()
-    elif args.command == "seed":
-        init_db()
-        seed(if_empty=args.if_empty, scale=args.scale)
-    elif args.command == "create-user":
-        create_user(args.email, args.name, args.role, args.password)
+    args.func(args)
     return 0
 
 

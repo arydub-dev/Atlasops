@@ -1,0 +1,48 @@
+name: Staging smoke (configuration required)
+
+# Manual / scheduled. Missing STAGING_BASE_URL fails this workflow.
+# Configure repository secrets: STAGING_BASE_URL, STAGING_API_URL,
+# STAGING_TEST_EMAIL (optional for deeper flows).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  staging-e2e:
+    name: Staging Playwright smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+      STAGING_TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
+      STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+      PLAYWRIGHT_SKIP_WEBSERVER: "1"
+      PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Require staging URL
+        run: |
+          if [ -z "$STAGING_BASE_URL" ]; then
+            echo "STAGING_BASE_URL is required; staging is NOT TESTED."
+            exit 1
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        id: gate
+      - if: steps.gate.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.gate.outputs.skip != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.gate.outputs.skip != 'true'
+        name: Run staging journey specs
+        run: npx playwright test e2e/staging --config=playwright.config.ts

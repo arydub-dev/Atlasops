@@ -25,7 +25,7 @@ import {
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "ATLASOPS security overview: role-based access control, JWT authentication, secure password hashing, tenant isolation, audit logging and containerized deployment.",
+    "ATLASOPS security overview: WorkOS AuthKit sessions, RBAC permissions, PostgreSQL row-level security, credential encryption, audit logging and containerized deployment.",
 };
 
 const GROUPS: {
@@ -37,23 +37,23 @@ const GROUPS: {
     items: [
       {
         icon: KeyRound,
-        title: "JWT authentication",
-        body: "Access is granted via signed JSON Web Tokens issued through an OAuth2 password flow. Tokens are verified on every request, so the API never trusts an unauthenticated caller.",
+        title: "Enterprise SSO",
+        body: "Sign-in is organization-first: enter your work email and ATLASOPS routes you to your company's identity provider (Okta, Entra ID, Google Workspace, and more). Sessions use httpOnly cookies — not localStorage JWTs — so the browser never exposes long-lived bearer tokens to XSS.",
       },
       {
         icon: UserCog,
         title: "Role-based access control",
-        body: "A dependency-based authorization layer enforces roles (admin, operations manager, analyst, executive) at the endpoint level, following the principle of least privilege.",
+        body: "A permission catalog maps system and custom roles to fine-grained actions. Every write endpoint checks membership permissions; viewers cannot mutate operational data.",
       },
       {
         icon: Lock,
-        title: "Secure password hashing",
-        body: "Passwords are never stored in plaintext. They are hashed with bcrypt via passlib, so credentials remain protected even at rest.",
+        title: "Encrypted connector credentials",
+        body: "Integration secrets are encrypted at rest with Fernet (CREDENTIALS_ENCRYPTION_KEY) before storage on Connection records.",
       },
       {
         icon: ScrollText,
-        title: "Session management",
-        body: "Token lifecycles are handled on the client with centralized handling for expiry and re-authentication, keeping session state predictable.",
+        title: "Server-side sessions",
+        body: "Sessions are stored server-side with hashed tokens, expiry, revocation, and concurrent-session limits.",
       },
     ],
   },
@@ -62,13 +62,13 @@ const GROUPS: {
     items: [
       {
         icon: Network,
-        title: "Tenant isolation architecture",
-        body: "The data model and service layer are structured so that multi-tenant isolation can be enforced consistently, keeping one organization's data separate from another's.",
+        title: "PostgreSQL row-level security",
+        body: "Tenant-owned tables carry organization_id and are protected with FORCE ROW LEVEL SECURITY policies keyed to app.current_org_id. Application queries also filter by organization so isolation is enforced in both layers.",
       },
       {
         icon: FileText,
         title: "Audit logging",
-        body: "Sensitive actions are recorded to an audit log, creating a traceable history of who did what and when across the platform.",
+        body: "Sensitive actions are recorded to an org-scoped audit log, creating a traceable history of who did what and when across the platform.",
       },
       {
         icon: FileCheck2,
@@ -92,8 +92,8 @@ const GROUPS: {
       },
       {
         icon: ShieldCheck,
-        title: "Security headers",
-        body: "Responses are intended to be served with hardening headers at the edge, reducing common browser-side attack vectors.",
+        title: "Security headers & rate limits",
+        body: "Responses include CSP, X-Frame-Options, and HSTS (in production). Auth routes are rate-limited per IP to slow credential stuffing.",
       },
     ],
   },
@@ -113,7 +113,7 @@ const GROUPS: {
       {
         icon: TerminalSquare,
         title: "Structured logging",
-        body: "Structured logs make operational and security-relevant events observable and easy to ship to a central system.",
+        body: "JSON structured logs plus optional OpenTelemetry and Prometheus metrics make operational and security-relevant events observable.",
       },
     ],
   },
@@ -135,7 +135,8 @@ export default function SecurityPage() {
             We avoid absolute claims like &ldquo;unbreakable&rdquo; or
             &ldquo;bank-grade.&rdquo; No system is perfectly secure. Instead, this
             page documents the specific controls and design decisions in the
-            platform so you can evaluate them on technical merit.
+            platform — WorkOS sessions, RBAC, PostgreSQL RLS, and encrypted
+            connector credentials — so you can evaluate them on technical merit.
           </Reveal>
         </Container>
       </Section>

@@ -1,11 +1,72 @@
-export type UserRole = "admin" | "operations_manager" | "analyst" | "executive";
+export type RoleSlug =
+  | "owner"
+  | "admin"
+  | "operations_director"
+  | "operations_manager"
+  | "analyst"
+  | "viewer"
+  | string;
+
+/** @deprecated Use RoleSlug / currentMembership.role_slug */
+export type UserRole = RoleSlug;
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   full_name: string;
-  role: UserRole;
+  avatar_url?: string | null;
   is_active: boolean;
+  is_platform_admin?: boolean;
+  created_at: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  plan: string;
+  owner_user_id?: string | null;
+  trial_ends_at?: string | null;
+  settings?: Record<string, unknown>;
+  branding?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface Membership {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role_slug: RoleSlug;
+  status: string;
+  organization_name?: string | null;
+  organization_slug?: string | null;
+}
+
+export interface MeResponse {
+  user: User;
+  memberships: Membership[];
+  current_organization: Organization | null;
+  current_membership: Membership | null;
+}
+
+export interface BillingPlanInfo {
+  slug: string;
+  name: string;
+  description: string;
+  seat_limit: number;
+  connector_limit: number;
+  ai_credits_monthly: number;
+  features: string[];
+  trial_days: number;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role_slug: string;
+  status: string;
+  expires_at: string;
   created_at: string;
 }
 
@@ -25,7 +86,7 @@ export type ShipmentStatus =
   | "customs_hold";
 
 export interface Shipment {
-  id: number;
+  id: string;
   reference: string;
   origin: string;
   destination: string;
@@ -39,13 +100,13 @@ export interface Shipment {
   eta: string;
   delivered_at: string | null;
   delay_days: number;
-  supplier_id: number | null;
-  warehouse_id: number | null;
-  product_id: number | null;
+  supplier_id: string | null;
+  warehouse_id: string | null;
+  product_id: string | null;
 }
 
 export interface ShipmentEvent {
-  id: number;
+  id: string;
   status: ShipmentStatus;
   location: string;
   note: string | null;
@@ -59,7 +120,7 @@ export interface ShipmentDetail extends Shipment {
 }
 
 export interface Warehouse {
-  id: number;
+  id: string;
   name: string;
   location: string;
   region: string;
@@ -72,10 +133,10 @@ export interface Warehouse {
 }
 
 export interface InventoryItem {
-  id: number;
-  warehouse_id: number;
+  id: string;
+  warehouse_id: string;
   warehouse_name: string;
-  product_id: number;
+  product_id: string;
   product_sku: string;
   product_name: string;
   quantity: number;
@@ -89,7 +150,7 @@ export interface InventoryItem {
 }
 
 export interface Supplier {
-  id: number;
+  id: string;
   name: string;
   country: string;
   region: string;
@@ -114,7 +175,7 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type RiskCategory = "supplier" | "shipment" | "inventory" | "geographic";
 
 export interface RiskAssessment {
-  id: number;
+  id: string;
   category: RiskCategory;
   level: RiskLevel;
   score: number;
@@ -122,7 +183,7 @@ export interface RiskAssessment {
   description: string;
   recommendation: string;
   entity_type: string | null;
-  entity_id: number | null;
+  entity_id: string | null;
   factors: Record<string, number> | null;
   created_at: string;
 }
@@ -144,14 +205,14 @@ export type AlertPriority = "low" | "medium" | "high" | "critical";
 export type AlertStatus = "open" | "acknowledged" | "resolved";
 
 export interface Alert {
-  id: number;
+  id: string;
   alert_type: AlertType;
   priority: AlertPriority;
   status: AlertStatus;
   title: string;
   message: string;
   entity_type: string | null;
-  entity_id: number | null;
+  entity_id: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
   created_at: string;
@@ -200,7 +261,7 @@ export interface SimulationResult {
 }
 
 export interface Simulation {
-  id: number;
+  id: string;
   name: string;
   simulation_type: SimulationType;
   parameters: Record<string, unknown>;
@@ -212,7 +273,7 @@ export interface Simulation {
 }
 
 export interface AIReport {
-  id: number;
+  id: string;
   prompt: string;
   response: string;
   report_type: string;
@@ -239,19 +300,25 @@ export interface SituationReport {
 }
 
 export interface RecommendedAction {
-  priority: RiskLevel;
+  priority: RiskLevel | string;
   title: string;
   detail: string;
+  reason?: string;
   expected_impact: string;
+  estimated_impact?: string;
   estimated_cost: string;
-  category: RiskCategory;
+  confidence?: number;
+  recommended_next_step?: string;
+  category: RiskCategory | string;
   entity_type: string | null;
-  entity_id: number | null;
+  entity_id: string | null;
+  affected_entities?: { type?: string | null; id?: string | null }[];
   score: number;
+  estimate_label?: string;
 }
 
 export interface CriticalAlertItem {
-  id: number;
+  id: string;
   title: string;
   message: string;
   priority: AlertPriority;
@@ -260,22 +327,87 @@ export interface CriticalAlertItem {
   recommended_response: string;
 }
 
+export interface TimelineEvent {
+  id: string;
+  title: string;
+  summary?: string;
+  severity?: string;
+  actor?: string;
+  source?: string;
+  occurred_at?: string;
+  entity_type?: string;
+  entity_id?: string;
+}
+
 export interface MissionControlResponse {
   health: HealthScore;
-  kpis: KPISet & { overall_risk_score: number; inventory_risk_count: number };
+  kpis: KPISet & {
+    overall_risk_score: number;
+    inventory_risk_count: number;
+    open_purchase_orders?: number;
+    open_sales_orders?: number;
+  };
   situation_report: SituationReport;
+  ai_situation_report?: SituationReport;
   recommended_actions: RecommendedAction[];
   critical_alerts: CriticalAlertItem[];
   shipment_trend: { label: string; shipped: number; delivered: number; delayed: number }[];
   delay_trend: { label: string; avg_delay_days: number; delayed_pct: number }[];
   inventory_trend: { label: string; utilization: number }[];
   supplier_performance_trend: { label: string; supplier_score: number; delivery_reliability: number }[];
+  inventory_health?: Record<string, number>;
+  risk_heatmap?: Record<string, number>;
+  purchase_orders?: {
+    open_count: number;
+    recent: { id: string; reference: string; status: string; total_amount: number }[];
+  };
+  sales_orders?: {
+    open_count: number;
+    recent: {
+      id: string;
+      reference: string;
+      status: string;
+      customer_name?: string;
+      total_amount: number;
+    }[];
+  };
+  top_incidents?: { id: string; title: string; severity: string; status: string }[];
+  operational_timeline?: TimelineEvent[];
+  connector_status?: {
+    total: number;
+    by_status: Record<string, number>;
+    healthy: number;
+    error: number;
+    items: {
+      id: string;
+      name: string;
+      type: string;
+      status: string;
+      health: string;
+      last_sync_at?: string | null;
+    }[];
+  };
+  graph?: { node_counts?: Record<string, number>; total_nodes?: number; total_edges?: number };
+  upcoming_risks?: { title: string; score: number; level: string }[];
+  data_health?: {
+    score?: number;
+    grade?: string;
+    confidence?: number;
+    remediations?: { priority?: string; action?: string }[];
+  };
+  predictions?: {
+    id: string;
+    kind: string;
+    title: string;
+    confidence: number;
+    score?: number;
+  }[];
 }
 
 // ---- Network View ----
 export interface NetworkNode {
   id: string;
-  entity_id: number;
+  entity_id: string;
   type: "warehouse" | "supplier";
   name: string;
   location: string;
@@ -307,6 +439,54 @@ export interface NetworkData {
   edges: NetworkEdge[];
   hotspots: { city: string; delayed: number; coords: [number, number] }[];
   summary: { warehouses: number; suppliers: number; active_routes: number };
+  mapbox?: { enabled: boolean; token_configured: boolean };
+  overlays?: {
+    delayed_routes: number;
+    high_risk_warehouses: number;
+    low_score_suppliers: number;
+  };
+}
+
+// ---- Incidents / Search / AI Orchestration ----
+export interface IncidentSummary {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  summary?: string | null;
+  created_at?: string | null;
+  affected_count?: number;
+}
+
+export interface IncidentDetail extends IncidentSummary {
+  owner_user_id?: string | null;
+  affected_entities?: { type: string; id: string; label?: string }[];
+  timeline?: TimelineEvent[];
+  recommendations?: string[];
+  ai_summary?: string | null;
+  resolution?: string | null;
+  resolved_at?: string | null;
+}
+
+export interface SearchResultItem {
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  summary: string;
+  status?: string | null;
+  risk_score?: number | null;
+  href?: string;
+}
+
+export interface AIOrchestrateResponse {
+  response: string;
+  model: string;
+  intent: string;
+  tool: string;
+  confidence: number | null;
+  citations: { type?: string; id?: string; source?: string }[];
+  report_id?: string;
+  context?: Record<string, unknown>;
 }
 
 // ---- Data Sources / Connected Mode ----
@@ -314,12 +494,16 @@ export type ConnectorType =
   | "sap_erp"
   | "oracle_erp"
   | "salesforce_crm"
+  | "salesforce"
   | "ms_dynamics"
+  | "dynamics_bc"
   | "wms"
   | "tms"
   | "rest_api"
   | "csv_upload"
-  | "excel_upload";
+  | "excel_upload"
+  | "json_upload"
+  | "ups";
 
 export type ConnectorStatus =
   | "connected"
@@ -329,10 +513,17 @@ export type ConnectorStatus =
   | "not_configured";
 
 export type ConnectorHealth = "healthy" | "degraded" | "down" | "unknown";
-export type ImportStatus = "success" | "partial" | "failed" | "running";
+export type ImportStatus =
+  | "success"
+  | "partial"
+  | "failed"
+  | "running"
+  | "queued"
+  | "retrying"
+  | "rolled_back";
 
 export interface DataSource {
-  id: number;
+  id: string;
   name: string;
   connector_type: ConnectorType;
   status: ConnectorStatus;
@@ -344,7 +535,11 @@ export interface DataSource {
   webhook_url: string | null;
   record_count: number;
   last_sync_at: string | null;
+  last_error: string | null;
+  failure_class?: string | null;
   is_active: boolean;
+  config?: Record<string, unknown>;
+  credential_hints?: Record<string, string>;
 }
 
 export interface IntegrationTemplate {
@@ -357,7 +552,7 @@ export interface IntegrationTemplate {
 }
 
 export interface ImportJob {
-  id: number;
+  id: string;
   source_name: string;
   source_type: string;
   entity_type: string;
@@ -414,7 +609,7 @@ export interface ImportPreview {
 }
 
 export interface ImportResult {
-  job_id: number;
+  job_id: string;
   entity: string;
   status: ImportStatus;
   rows_processed: number;

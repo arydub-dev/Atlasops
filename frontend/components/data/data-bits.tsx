@@ -17,12 +17,16 @@ export const CONNECTOR_ICON: Record<string, LucideIcon> = {
   sap_erp: Database,
   oracle_erp: Database,
   salesforce_crm: Users,
+  salesforce: Users,
   ms_dynamics: Cloud,
+  dynamics_bc: Cloud,
   wms: Building2,
   tms: Truck,
   rest_api: Network,
   csv_upload: Boxes,
   excel_upload: Boxes,
+  json_upload: Boxes,
+  ups: Truck,
 };
 
 export function ConnectorIcon({ type, className }: { type: ConnectorType | string; className?: string }) {
@@ -78,6 +82,9 @@ const IMPORT_VARIANT: Record<ImportStatus, Parameters<typeof Badge>[0]["variant"
   partial: "warning",
   failed: "destructive",
   running: "default",
+  queued: "default",
+  retrying: "warning",
+  rolled_back: "secondary",
 };
 
 export function ImportStatusBadge({ status }: { status: ImportStatus }) {

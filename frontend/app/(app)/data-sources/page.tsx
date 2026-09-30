@@ -12,7 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canWriteRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { DataSource, DataSummary, IntegrationTemplate } from "@/lib/types";
 import { formatNumber, relativeTime } from "@/lib/format";
@@ -25,14 +25,14 @@ import { Badge } from "@/components/ui/badge";
 import { ConnectorIcon, HealthDot, StatusBadge } from "@/components/data/data-bits";
 
 export default function DataSourcesPage() {
-  const { user } = useAuth();
-  const canWrite = user && user.role !== "executive";
+  const { currentMembership } = useAuth();
+  const canWrite = canWriteRole(currentMembership?.role_slug);
   const { data: summary, loading, error, refetch } = useFetch<DataSummary>("/data/summary");
   const { data: sources, refetch: refetchSources } = useFetch<DataSource[]>("/data/sources");
   const { data: integrations } = useFetch<IntegrationTemplate[]>("/data/integrations");
-  const [syncing, setSyncing] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
 
-  async function sync(id: number) {
+  async function sync(id: string) {
     setSyncing(id);
     try {
       await api.post(`/data/sources/${id}/sync`);

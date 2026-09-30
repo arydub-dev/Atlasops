@@ -5,7 +5,7 @@ import { formatNumber, formatPercent } from "@/lib/format";
 import { CHART_COLORS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
-import { LoadingState } from "@/components/shared/states";
+import { ErrorState, LoadingState } from "@/components/shared/states";
 import { ChartCard } from "@/components/charts/chart-card";
 import { AreaTrend, BarTrend, Donut, HorizontalBars, LineTrend } from "@/components/charts/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,13 +35,15 @@ export default function AnalyticsPage() {
 }
 
 function DeliveryTab() {
-  const { data } = useFetch<{
+  const { data, loading, error, refetch } = useFetch<{
     status_breakdown: Record<string, number>;
     shipment_trend: Record<string, unknown>[];
     delay_trend: Record<string, unknown>[];
     carrier_performance: { carrier: string; shipments: number; avg_delay_days: number }[];
   }>("/analytics/delivery");
-  if (!data) return <LoadingState />;
+  if (loading && !data) return <LoadingState />;
+  if (error || !data)
+    return <ErrorState message={error || "Failed to load delivery analytics"} onRetry={() => refetch()} />;
 
   const statusDonut = Object.entries(data.status_breakdown).map(([k, v], i) => ({
     name: k.replace(/_/g, " "),
@@ -84,13 +86,15 @@ function DeliveryTab() {
 }
 
 function SupplierTab() {
-  const { data } = useFetch<{
+  const { data, loading, error, refetch } = useFetch<{
     performance_trend: Record<string, unknown>[];
     by_region: { region: string; avg_score: number; avg_reliability: number; suppliers: number }[];
     top_performers: { name: string; score: number }[];
     bottom_performers: { name: string; score: number }[];
   }>("/analytics/suppliers");
-  if (!data) return <LoadingState />;
+  if (loading && !data) return <LoadingState />;
+  if (error || !data)
+    return <ErrorState message={error || "Failed to load supplier analytics"} onRetry={() => refetch()} />;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -142,13 +146,15 @@ function SupplierTab() {
 }
 
 function InventoryTab() {
-  const { data } = useFetch<{
+  const { data, loading, error, refetch } = useFetch<{
     health_breakdown: Record<string, number>;
     utilization_trend: Record<string, unknown>[];
     utilization_heatmap: { region: string; avg_utilization: number; warehouses: number }[];
     inventory_by_category: { category: string; units: number }[];
   }>("/analytics/inventory");
-  if (!data) return <LoadingState />;
+  if (loading && !data) return <LoadingState />;
+  if (error || !data)
+    return <ErrorState message={error || "Failed to load inventory analytics"} onRetry={() => refetch()} />;
 
   const donut = [
     { name: "Healthy", value: data.health_breakdown.ok ?? 0, color: CHART_COLORS.green },
@@ -203,12 +209,14 @@ function InventoryTab() {
 }
 
 function ForecastTab() {
-  const { data } = useFetch<{
+  const { data, loading, error, refetch } = useFetch<{
     history: Record<string, unknown>[];
     forecast: { label: string; projected_demand: number; lower: number; upper: number }[];
     avg_weekly_volume: number;
   }>("/analytics/forecast");
-  if (!data) return <LoadingState />;
+  if (loading && !data) return <LoadingState />;
+  if (error || !data)
+    return <ErrorState message={error || "Failed to load forecast analytics"} onRetry={() => refetch()} />;
 
   const merged = [
     ...data.history.map((h) => ({ label: h.label, actual: h.shipped })),

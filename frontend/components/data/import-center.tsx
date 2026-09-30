@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   CheckCircle2,
   FileSpreadsheet,
@@ -11,7 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canWriteRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { EntitySpec, ImportJob, ImportPreview, ImportResult } from "@/lib/types";
 import { formatNumber, relativeTime } from "@/lib/format";
@@ -31,8 +31,8 @@ import { cn } from "@/lib/utils";
 const NONE = "__none__";
 
 export function ImportCenter({ excel = false }: { excel?: boolean }) {
-  const { user } = useAuth();
-  const canWrite = user && user.role !== "executive";
+  const { currentMembership } = useAuth();
+  const canWrite = canWriteRole(currentMembership?.role_slug);
   const { data: entities } = useFetch<Record<string, EntitySpec>>("/data/entities");
   const { data: history, refetch: refetchHistory } = useFetch<ImportJob[]>("/data/imports");
 
@@ -47,7 +47,7 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const accept = excel ? ".xlsx,.xlsm" : ".csv";
+  const accept = excel ? ".xlsx" : ".csv";
   const spec = entities?.[entity];
 
   function reset() {

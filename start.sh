@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # ATLASOPS — single combined launcher (backend + frontend).
 # Usage:  ./start.sh        then open http://127.0.0.1:3000
+#
+# Local defaults: SQLite + inline connector sync (Redis optional).
+# Production: use Docker Compose / Render with Postgres + Redis + worker.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,6 +13,7 @@ mkdir -p "$RUN_DIR"
 BACKEND_URL="http://127.0.0.1:8000"
 FRONTEND_URL="http://127.0.0.1:3000"
 DB_URL="sqlite:///./dev.db"
+PY="$ROOT/backend/.venv/bin/python"
 
 free_port() {
   local port="$1"
@@ -17,6 +21,7 @@ free_port() {
   pids="$(lsof -ti "tcp:$port" 2>/dev/null || true)"
   if [ -n "$pids" ]; then
     echo "  freeing port $port (pids: $pids)"
+    # shellcheck disable=SC2086
     kill -9 $pids 2>/dev/null || true
     sleep 1
   fi
@@ -30,21 +35,29 @@ free_port 3000
 echo "==> Starting backend"
 cd "$ROOT/backend"
 
-if [ ! -x ".venv/bin/uvicorn" ]; then
+if [ ! -x "$PY" ]; then
   echo "ERROR: backend/.venv not found. Create it with:"
   echo "  cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt"
   exit 1
 fi
 
-# Seed a local SQLite DB on first run.
-if [ ! -f "dev.db" ]; then
-  echo "  seeding demo dataset (first run)…"
-  DATABASE_URL="$DB_URL" .venv/bin/python -m app.cli init-db
-  DATABASE_URL="$DB_URL" .venv/bin/python -m app.cli seed --scale demo --if-empty
-fi
+# Prefer python -m uvicorn so relocated checkouts work (venv script shebangs may
+# still point at an old absolute path).
+echo "  ensuring schema (Alembic)…"
+DATABASE_URL="$DB_URL" "$PY" -m app.cli ensure-schema
 
-DATABASE_URL="$DB_URL" CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000" \
-  nohup .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+echo "  ensuring sandbox seed…"
+DATABASE_URL="$DB_URL" "$PY" -m app.cli seed-sandbox \
+  --email "demo@example.com" --org "Demo Manufacturing Co" || true
+
+DATABASE_URL="$DB_URL" \
+  ENVIRONMENT=development \
+  CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000" \
+  FRONTEND_URL="http://127.0.0.1:3000" \
+  SEED_ON_STARTUP=false \
+  CONNECTOR_SYNC_INLINE=true \
+  ALLOW_CREATE_ALL_ON_STARTUP=false \
+  nohup "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
   > "$RUN_DIR/backend.log" 2>&1 &
 echo $! > "$RUN_DIR/backend.pid"
 
@@ -58,6 +71,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 NEXT_PUBLIC_API_URL="$BACKEND_URL" \
+  NEXT_PUBLIC_DEV_LOGIN=true \
   nohup npm run dev -- -H 0.0.0.0 -p 3000 \
   > "$RUN_DIR/frontend.log" 2>&1 &
 echo $! > "$RUN_DIR/frontend.pid"
@@ -69,11 +83,14 @@ for i in $(seq 1 60); do
   f=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL/login" 2>/dev/null || echo 000)
   if [ "$b" = "200" ] && [ "$f" = "200" ]; then
     echo
-    echo "  ✅ Backend  : $BACKEND_URL  (docs: $BACKEND_URL/docs)"
-    echo "  ✅ Frontend : $FRONTEND_URL"
+    echo "  Backend  : $BACKEND_URL  (docs: $BACKEND_URL/docs)"
+    echo "  Frontend : $FRONTEND_URL"
     echo
-    echo "  Open $FRONTEND_URL and sign in:"
-    echo "    ops@atlasops.io / ops12345   (Operations Manager)"
+    echo "  Open $FRONTEND_URL/login"
+    echo "  Local auth: Dev login (NEXT_PUBLIC_DEV_LOGIN=true)"
+    echo "  Use demo@example.com — WorkOS not required in development."
+    echo "  Connector sync runs inline (Redis optional). For workers:"
+    echo "    docker compose up redis worker -d"
     echo
     echo "  Logs:  .run/backend.log  .run/frontend.log"
     echo "  Stop:  ./stop.sh"
@@ -82,5 +99,5 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-echo "  ⚠ Timed out waiting. Check .run/backend.log and .run/frontend.log"
+echo "  Timed out waiting. Check .run/backend.log and .run/frontend.log"
 exit 1

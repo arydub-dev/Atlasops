@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import {
-  Boxes,
-  Building2,
   Factory,
   HeartPulse,
   LineChart,

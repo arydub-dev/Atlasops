@@ -1,7 +1,7 @@
 """Automatic alert generation from current operational state."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,32 +13,46 @@ from app.models.enums import (
     AlertType,
     ShipmentStatus,
 )
+from app.tenancy.context import get_tenant
 
 
-def _exists(db: Session, alert_type: AlertType, entity_type: str, entity_id: int) -> bool:
-    return db.scalar(
-        select(func.count(Alert.id)).where(
-            Alert.alert_type == alert_type,
-            Alert.entity_type == entity_type,
-            Alert.entity_id == entity_id,
-            Alert.status != AlertStatus.RESOLVED,
+def _exists(
+    db: Session,
+    org_id: UUID,
+    alert_type: AlertType,
+    entity_type: str,
+    entity_id: UUID,
+) -> bool:
+    return (
+        db.scalar(
+            select(func.count(Alert.id)).where(
+                Alert.organization_id == org_id,
+                Alert.alert_type == alert_type,
+                Alert.entity_type == entity_type,
+                Alert.entity_id == entity_id,
+                Alert.status != AlertStatus.RESOLVED,
+            )
         )
-    ) > 0
+        > 0
+    )
 
 
 def generate_alerts(db: Session) -> int:
     """Scan state and create alerts for open conditions. Returns count created."""
+    org_id = get_tenant().organization_id
     new_alerts: list[Alert] = []
 
-    # ---- Delayed shipments ----
     delayed = db.scalars(
         select(Shipment)
-        .where(Shipment.status == ShipmentStatus.DELAYED)
+        .where(
+            Shipment.organization_id == org_id,
+            Shipment.status == ShipmentStatus.DELAYED,
+        )
         .order_by(Shipment.value_usd.desc())
         .limit(60)
     ).all()
     for sh in delayed:
-        if _exists(db, AlertType.DELAYED_SHIPMENT, "shipment", sh.id):
+        if _exists(db, org_id, AlertType.DELAYED_SHIPMENT, "shipment", sh.id):
             continue
         priority = (
             AlertPriority.CRITICAL
@@ -49,6 +63,7 @@ def generate_alerts(db: Session) -> int:
         )
         new_alerts.append(
             Alert(
+                organization_id=org_id,
                 alert_type=AlertType.DELAYED_SHIPMENT,
                 priority=priority,
                 status=AlertStatus.OPEN,
@@ -62,21 +77,25 @@ def generate_alerts(db: Session) -> int:
             )
         )
 
-    # ---- Inventory stockout risk ----
     low_stock = db.execute(
         select(Inventory, Warehouse.name, Product.name)
         .join(Warehouse, Inventory.warehouse_id == Warehouse.id)
         .join(Product, Inventory.product_id == Product.id)
-        .where(Inventory.is_current.is_(True), Inventory.quantity <= Inventory.reorder_point)
+        .where(
+            Inventory.organization_id == org_id,
+            Inventory.is_current.is_(True),
+            Inventory.quantity <= Inventory.reorder_point,
+        )
         .order_by((Inventory.reorder_point - Inventory.quantity).desc())
         .limit(80)
     ).all()
     for inv, wh_name, prod_name in low_stock:
-        if _exists(db, AlertType.INVENTORY_STOCKOUT_RISK, "inventory", inv.id):
+        if _exists(db, org_id, AlertType.INVENTORY_STOCKOUT_RISK, "inventory", inv.id):
             continue
         priority = AlertPriority.CRITICAL if inv.quantity <= 0 else AlertPriority.HIGH
         new_alerts.append(
             Alert(
+                organization_id=org_id,
                 alert_type=AlertType.INVENTORY_STOCKOUT_RISK,
                 priority=priority,
                 status=AlertStatus.OPEN,
@@ -90,19 +109,23 @@ def generate_alerts(db: Session) -> int:
             )
         )
 
-    # ---- Supplier failure risk ----
     weak_suppliers = db.scalars(
         select(Supplier)
-        .where(Supplier.supplier_score < 55, Supplier.is_active.is_(True))
+        .where(
+            Supplier.organization_id == org_id,
+            Supplier.supplier_score < 55,
+            Supplier.is_active.is_(True),
+        )
         .order_by(Supplier.supplier_score.asc())
         .limit(25)
     ).all()
     for s in weak_suppliers:
-        if _exists(db, AlertType.SUPPLIER_FAILURE_RISK, "supplier", s.id):
+        if _exists(db, org_id, AlertType.SUPPLIER_FAILURE_RISK, "supplier", s.id):
             continue
         priority = AlertPriority.CRITICAL if s.supplier_score < 40 else AlertPriority.HIGH
         new_alerts.append(
             Alert(
+                organization_id=org_id,
                 alert_type=AlertType.SUPPLIER_FAILURE_RISK,
                 priority=priority,
                 status=AlertStatus.OPEN,
@@ -116,12 +139,12 @@ def generate_alerts(db: Session) -> int:
             )
         )
 
-    # ---- Forecasted demand spike (high-velocity SKUs near reorder) ----
     spike_candidates = db.execute(
         select(Inventory, Product.name, Warehouse.name)
         .join(Product, Inventory.product_id == Product.id)
         .join(Warehouse, Inventory.warehouse_id == Warehouse.id)
         .where(
+            Inventory.organization_id == org_id,
             Inventory.is_current.is_(True),
             Inventory.avg_daily_demand > 0,
             Inventory.quantity < Inventory.avg_daily_demand * 21,
@@ -130,10 +153,11 @@ def generate_alerts(db: Session) -> int:
         .limit(25)
     ).all()
     for inv, prod_name, wh_name in spike_candidates:
-        if _exists(db, AlertType.FORECASTED_DEMAND_SPIKE, "inventory", inv.id):
+        if _exists(db, org_id, AlertType.FORECASTED_DEMAND_SPIKE, "inventory", inv.id):
             continue
         new_alerts.append(
             Alert(
+                organization_id=org_id,
                 alert_type=AlertType.FORECASTED_DEMAND_SPIKE,
                 priority=AlertPriority.MEDIUM,
                 status=AlertStatus.OPEN,
@@ -149,5 +173,10 @@ def generate_alerts(db: Session) -> int:
         )
 
     db.add_all(new_alerts)
+    db.flush()
+    if new_alerts:
+        from app.services.alert_channels import dispatch_new_alerts
+
+        dispatch_new_alerts(db, new_alerts)
     db.commit()
     return len(new_alerts)

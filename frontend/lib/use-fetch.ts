@@ -12,20 +12,22 @@ interface FetchState<T> {
 
 export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchState<T> {
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(path));
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
-    if (!path) {
-      setLoading(false);
-      return;
-    }
+    if (!path) return;
+
     let active = true;
-    setLoading(true);
-    setError(null);
+    const kickoff = setTimeout(() => {
+      if (!active) return;
+      setLoading(true);
+      setError(null);
+    }, 0);
+
     api
       .get<T>(path)
       .then((d) => {
@@ -37,11 +39,18 @@ export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchSta
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
+      clearTimeout(kickoff);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, nonce, ...deps]);
 
-  return { data, loading, error, refetch };
+  return {
+    data: path ? data : null,
+    loading: path ? loading : false,
+    error: path ? error : null,
+    refetch,
+  };
 }

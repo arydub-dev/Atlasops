@@ -5,20 +5,20 @@ import Link from "next/link";
 import { useState } from "react";
 import { Plus, Settings2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canWriteRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { DataSource, IntegrationTemplate } from "@/lib/types";
 import { formatNumber, relativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { CardGridSkeleton, ErrorState } from "@/components/shared/states";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConnectorIcon, HealthDot, StatusBadge } from "@/components/data/data-bits";
 
 export default function ConnectorsPage() {
   const router = useRouter();
-  const { user } = useAuth();
-  const canWrite = user && user.role !== "executive";
+  const { currentMembership } = useAuth();
+  const canWrite = canWriteRole(currentMembership?.role_slug);
   const { data: sources, loading, error, refetch } = useFetch<DataSource[]>("/data/sources");
   const { data: integrations, refetch: refetchTemplates } = useFetch<IntegrationTemplate[]>("/data/integrations");
   const [adding, setAdding] = useState<string | null>(null);
@@ -83,6 +83,9 @@ export default function ConnectorsPage() {
                     </Button>
                   </Link>
                 </div>
+                {s.status === "error" && s.last_error && (
+                  <p className="mt-2 text-xs text-destructive">{s.last_error}</p>
+                )}
               </Card>
             ))}
           </div>

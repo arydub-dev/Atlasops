@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Bell, BellRing, CheckCheck, CircleCheck } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canOperateRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { Alert, AlertStatus, Page } from "@/lib/types";
 import { formatNumber, relativeTime, titleCase } from "@/lib/format";
@@ -37,13 +37,11 @@ const STATUS_VARIANT: Record<AlertStatus, "warning" | "default" | "success"> = {
 };
 
 export default function AlertsPage() {
-  const { user } = useAuth();
+  const { currentMembership } = useAuth();
   const [status, setStatus] = useState("open");
   const [priority, setPriority] = useState("all");
   const [type, setType] = useState("all");
   const [page, setPage] = useState(1);
-
-  useEffect(() => setPage(1), [status, priority, type]);
 
   const { data: stats, refetch: refetchStats } = useFetch<AlertStats>("/alerts/stats");
 
@@ -59,10 +57,9 @@ export default function AlertsPage() {
     type,
   ]);
 
-  const canManage =
-    user?.role === "admin" || user?.role === "operations_manager" || user?.role === "analyst";
+  const canManage = canOperateRole(currentMembership?.role_slug);
 
-  async function update(id: number, newStatus: AlertStatus) {
+  async function update(id: string, newStatus: AlertStatus) {
     await api.patch(`/alerts/${id}`, {
       status: newStatus,
       resolution_note: newStatus === "resolved" ? "Resolved from Alert Center" : undefined,
@@ -93,7 +90,13 @@ export default function AlertsPage() {
       <Card>
         <CardContent className="space-y-4 pt-5">
           <div className="flex flex-wrap gap-2">
-            <Select value={status} onValueChange={setStatus}>
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All statuses</SelectItem>
@@ -102,7 +105,13 @@ export default function AlertsPage() {
                 <SelectItem value="resolved">Resolved</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={priority} onValueChange={setPriority}>
+            <Select
+              value={priority}
+              onValueChange={(value) => {
+                setPriority(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All priorities</SelectItem>
@@ -112,7 +121,13 @@ export default function AlertsPage() {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={type} onValueChange={setType}>
+            <Select
+              value={type}
+              onValueChange={(value) => {
+                setType(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-52"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All types</SelectItem>

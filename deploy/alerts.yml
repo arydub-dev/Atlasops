@@ -1,0 +1,37 @@
+groups:
+  - name: atlasops-launch
+    rules:
+      - alert: AtlasopsApiUnavailable
+        expr: up{job="atlasops-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: ATLASOPS API scrape is unavailable
+      - alert: AtlasopsApiErrors
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.01) > 0.01
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: ATLASOPS API error rate exceeds 1 percent
+      - alert: AtlasopsApiLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: ATLASOPS API p95 latency exceeds one second
+      - alert: AtlasopsBillingWebhookFailure
+        expr: increase(stripe_webhook_total{result="error"}[5m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: Stripe webhook processing failed
+      - alert: AtlasopsQueueEnqueueFailure
+        expr: increase(connector_enqueue_total{result="error"}[5m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: Connector enqueue failures require investigation
+      - alert: AtlasopsAiFallbackSpike
+        expr: sum(increase(ai_provider_requests_total{provider="openai",result="fallback"}[10m])) > 5
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Repeated AI provider failures are falling back to the local engine

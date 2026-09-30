@@ -1,122 +1,90 @@
-# API Reference
+# API Reference (Supply v2)
 
-Base URL: `http://localhost:8000`
-All business endpoints are versioned under `/api/v1` and require a `Bearer` JWT unless noted.
+Base URL: `http://localhost:8000`  
+Business endpoints: `/api/v1/...`
 
-Interactive docs (OpenAPI): **`/docs`** (Swagger UI) and **`/redoc`**. Machine-readable spec: **`/openapi.json`**.
+Interactive docs: `/docs` and `/redoc` (disabled when `ENVIRONMENT=production` unless `ENABLE_API_DOCS=true`).
 
-## Authentication
+## Authentication model
 
-| Method | Path | Roles | Description |
+Supply v2 does **not** use JWT-in-`localStorage` password login.
+
+| Mechanism | How |
+| --- | --- |
+| Browser sessions | httpOnly cookie `supply_session` (WorkOS AuthKit / SSO callback, or `POST /auth/dev-login` in development only) |
+| Active organization | Header `X-Organization-Id: <uuid>` (or session’s current org) |
+| Machine access | `Authorization: Bearer <api_token>` created under `/orgs/current/tokens` |
+
+All tenant data endpoints require authentication **and** an organization context. Permissions are enforced with `require_permission("resource.action")`.
+
+### Auth endpoints
+
+| Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| POST | `/api/v1/auth/login` | public | OAuth2 password flow (`username`=email, `password`). Returns JWT. |
-| GET | `/api/v1/auth/me` | any | Current user profile |
-| GET | `/api/v1/auth/users` | admin | List users |
-| POST | `/api/v1/auth/users` | admin | Create user |
+| GET | `/auth/login` | public (rate-limited) | Returns WorkOS `authorization_url` |
+| GET | `/auth/callback` | public (rate-limited) | OAuth code exchange; sets session cookie |
+| POST | `/auth/logout` | session | Revokes session; clears cookie |
+| GET | `/auth/me` | session/token | User, memberships, current org |
+| POST | `/auth/switch-org` | session | Switch active organization |
+| POST | `/auth/dev-login` | public, **dev only** | Local bypass when WorkOS unset |
 
 ```bash
-# Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=ops@atlasops.io&password=ops12345"
+# Development login (WorkOS not configured)
+curl -c cookies.txt -X POST http://localhost:8000/api/v1/auth/dev-login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","full_name":"You"}'
 
-# Authenticated request
-curl http://localhost:8000/api/v1/dashboard \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
+# Authenticated call
+curl -b cookies.txt http://localhost:8000/api/v1/mission-control \
+  -H "X-Organization-Id: <org-uuid>"
 ```
 
-## Dashboard
+## Organizations
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/dashboard` | KPIs, trend series, critical alerts, top risks, recommended actions |
-
-## Shipments
-
-| Method | Path | Roles | Description |
+| Method | Path | Permission | Description |
 | --- | --- | --- | --- |
-| GET | `/api/v1/shipments` | any | List with `q`, `status`, `supplier_id`, `warehouse_id`, `sort_by`, `sort_dir`, `page`, `page_size` |
-| GET | `/api/v1/shipments/{id}` | any | Shipment detail + tracking timeline |
-| PATCH | `/api/v1/shipments/{id}/status` | ops_manager / admin | Update status (records an event) |
+| POST | `/orgs` | authenticated | Create organization (caller becomes owner) |
+| GET | `/orgs` | authenticated | List my organizations |
+| GET/PATCH | `/orgs/current` | `org.read` / `org.update` | Current org |
+| POST | `/orgs/current/invitations` | `org.members.invite` | Invite member |
+| POST | `/orgs/invitations/accept` | authenticated | Accept invite (email must match) |
+| GET/PATCH/DELETE | `/orgs/current/members...` | member manage | Members |
+| POST | `/orgs/current/tokens` | `org.tokens.manage` | Create API token (raw token shown once) |
+| GET | `/orgs/current/audit-logs` | `org.audit.read` | Audit trail |
+| GET | `/orgs/current/usage` | `org.usage.read` | Usage snapshot |
 
-## Inventory
+## Billing
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/inventory/warehouses` | List warehouses |
-| GET | `/api/v1/inventory/warehouses/{id}` | Warehouse detail |
-| GET | `/api/v1/inventory/health` | Health buckets (ok/low_stock/overstock/stockout) |
-| GET | `/api/v1/inventory/items` | Enriched inventory lines (`q`, `warehouse_id`, `status`, pagination) |
-| GET | `/api/v1/inventory/reorders` | Reorder recommendations |
-
-## Suppliers
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/suppliers` | List (`q`, `sort_by`, `sort_dir`) |
-| GET | `/api/v1/suppliers/ranking` | Ranked scorecards |
-| GET | `/api/v1/suppliers/{id}/scorecard` | Single scorecard + trend |
-| GET | `/api/v1/suppliers/compare?ids=1,2,3` | Compare suppliers |
-
-## Risk Center
-
-| Method | Path | Roles | Description |
+| Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| GET | `/api/v1/risks/summary` | any | Overall score/level, by-category, counts, top risks |
-| GET | `/api/v1/risks` | any | Risk register (`category`, `level`, `limit`) |
-| POST | `/api/v1/risks/recompute` | ops_manager / analyst / admin | Recompute risk + regenerate alerts |
+| GET | `/billing/plans` | public | Plan catalog |
+| GET | `/billing/account` | `org.billing.manage` | Current org billing account |
+| POST | `/billing/checkout` | `org.billing.manage` | Stripe Checkout (FRONTEND_URL allowlisted return URLs) |
+| POST | `/billing/portal` | `org.billing.manage` | Stripe Customer Portal |
+| POST | `/billing/cancel` | `org.billing.manage` | Cancel subscription |
+| POST | `/billing/webhooks/stripe` | Stripe signature | Webhooks (idempotent via `stripe_events`) |
 
-## Scenario Simulator
+Path variants `/billing/.../{organization_id}` remain for compatibility but **must** match the active org or return 403.
 
-| Method | Path | Roles | Description |
+## Data / connectors
+
+| Method | Path | Permission | Description |
 | --- | --- | --- | --- |
-| POST | `/api/v1/simulations/run` | ops_manager / analyst / executive / admin | Run a scenario |
-| GET | `/api/v1/simulations` | any | Recent simulations |
-| GET | `/api/v1/simulations/{id}` | any | Simulation detail |
+| GET/POST | `/data/sources` | connectors.* | List/create connections |
+| PUT | `/data/sources/{id}/config` | `connectors.update` | Config + `credentials` dict (or legacy `api_key`) |
+| POST | `/data/sources/{id}/test` | `connectors.sync` | Live connection test |
+| POST | `/data/sources/{id}/sync` | `connectors.sync` | Live sync (Dynamics BC / Salesforce / UPS) |
+| POST | `/data/import/...` | imports.* | CSV/Excel import |
 
-Scenario `simulation_type`: `supplier_shutdown` · `port_closure` · `demand_spike` · `weather_disruption`.
+Credential storage format: Fernet-encrypted JSON object. Legacy single-string blobs are accepted and migrated forward.
 
-```bash
-curl -X POST http://localhost:8000/api/v1/simulations/run \
-  -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
-  -d '{"simulation_type":"supplier_shutdown","severity":0.8,"duration_days":21}'
-```
+## Core operational APIs
 
-## Alert Center
+Shipments, inventory, suppliers, risks, simulations, alerts, analytics, network, mission-control, and AI advisor remain under `/api/v1/...` with UUID identifiers and organization-scoped queries. Prefer OpenAPI `/docs` for the live schema.
 
-| Method | Path | Roles | Description |
-| --- | --- | --- | --- |
-| GET | `/api/v1/alerts` | any | List (`status`, `priority`, `alert_type`, pagination) |
-| GET | `/api/v1/alerts/stats` | any | Counts by status/priority/type |
-| PATCH | `/api/v1/alerts/{id}` | ops_manager / analyst / admin | Acknowledge / resolve |
-| POST | `/api/v1/alerts/generate` | ops_manager / analyst / admin | Regenerate alerts from state |
+## Health & metrics
 
-## Analytics
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/analytics/delivery` | Status breakdown, carrier performance, trends |
-| GET | `/api/v1/analytics/suppliers` | Regional + top/bottom performers |
-| GET | `/api/v1/analytics/inventory` | Health, utilization heatmap, by-category |
-| GET | `/api/v1/analytics/forecast` | Demand forecast with confidence band (`horizon_weeks`) |
-
-## AI Advisor
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/ai/status` | Provider (openai/local-engine) |
-| GET | `/api/v1/ai/suggestions` | Suggested prompts |
-| POST | `/api/v1/ai/chat` | Ask a question; answer grounded in live data |
-| GET | `/api/v1/ai/reports` | Your past AI conversations |
-
-## Health
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/` | Service metadata |
-| GET | `/health` | Liveness probe |
-
-## Errors
-
-Standard HTTP semantics with a JSON body: `{ "detail": "..." }`.
-`401` invalid/expired token · `403` insufficient role · `404` not found · `409` conflict · `422` validation error.
+| Path | Notes |
+| --- | --- |
+| `/health`, `/health/live`, `/health/ready` | Liveness / readiness |
+| `/metrics` | Prometheus; in production requires `Authorization: Bearer $METRICS_TOKEN` |

@@ -34,7 +34,7 @@ export default function SuppliersPage() {
   const [selected, setSelected] = useState<SupplierScorecard | null>(null);
   const [loadingCard, setLoadingCard] = useState(false);
 
-  async function openScorecard(id: number) {
+  async function openScorecard(id: string) {
     setLoadingCard(true);
     try {
       const card = await api.get<SupplierScorecard>(`/suppliers/${id}/scorecard`);
