@@ -25,9 +25,10 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://atlasops:atlasops@localhost:5432/atlasops",
         validation_alias=AliasChoices(
             "DATABASE_URL",
+            # Prefer the pooled connection when Marketplace supplies both.
+            "POSTGRES_URL",
             "DATABASE_URL_UNPOOLED",
             "POSTGRES_URL_NON_POOLING",
-            "POSTGRES_URL",
         ),
     )
 

@@ -1,3 +1,5 @@
+> Superseded provider choice (2026-10-01): the user selected Vercel hosting. See [VERCEL_PRODUCTION.md](VERCEL_PRODUCTION.md). The Render instructions below are historical, not the current deployment plan.
+
 # Vercel + Render + Upstash supervised pilot deployment
 
 Status: NOT VERIFIED. User-selected architecture (2026-09-30): Vercel frontend at https://www.atlasops.online (atlasops.online redirects here); Render Docker API, Managed PostgreSQL and dedicated ARQ worker; Upstash Redis; WorkOS; Stripe; Salesforce Developer Edition; Sentry email/Slack destinations. Naming below is proposed, not evidence that resources exist.
