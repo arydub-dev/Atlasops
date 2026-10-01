@@ -48,7 +48,7 @@ const GROUPS: {
       {
         icon: Lock,
         title: "Encrypted connector credentials",
-        body: "Integration secrets are encrypted at rest with Fernet (CREDENTIALS_ENCRYPTION_KEY) before storage on Connection records.",
+        body: "Integration credentials are encrypted before they are stored.",
       },
       {
         icon: ScrollText,
