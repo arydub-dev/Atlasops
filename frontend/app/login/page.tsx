@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Activity, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { isBusinessEmail } from "@/lib/business-email";
 import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ function LoginForm() {
   const { continueWithEmail, devLogin, user, currentOrganization, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isSignup = searchParams.get("signup") === "1";
   const inviteToken = searchParams.get("invite") || searchParams.get("token");
 
   const [error, setError] = useState("");
@@ -43,6 +45,7 @@ function LoginForm() {
   async function handleContinue(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (isSignup && !isBusinessEmail(email)) { setError("Use your company email, such as you@company.com. Personal email addresses are not accepted for signup."); return; }
     setPhase("checking");
     try {
       await continueWithEmail({
@@ -114,8 +117,8 @@ function LoginForm() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-2xl font-semibold tracking-tight">Welcome back</h2>
-            <p className="text-sm text-muted-foreground">Enter your work email to continue.</p>
+            <h2 className="text-2xl font-semibold tracking-tight">{isSignup ? "Start your free trial" : "Welcome back"}</h2>
+            <p className="text-sm text-muted-foreground">{isSignup ? "Use your company email for a 14-day trial. Personal email addresses are not accepted." : "Enter your work email to continue."}</p>
           </div>
 
           <form onSubmit={handleContinue} className="space-y-4">

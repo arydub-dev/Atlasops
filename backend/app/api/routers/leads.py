@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import require_platform_admin
 from app.core.config import settings
+from app.core.business_email import require_business_email
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit_auth
 from app.connectors.credentials import encrypt_credentials, decrypt_credentials
@@ -29,9 +30,10 @@ class Inquiry(BaseModel):
 @router.post('/leads', status_code=202, dependencies=[Depends(rate_limit_auth)])
 def create_inquiry(body: Inquiry, db: Session = Depends(get_db)):
     if not settings.LEAD_CAPTURE_ENABLED:
-        raise HTTPException(503, 'Demo requests are not open yet. Please try again later.')
+        raise HTTPException(503, 'Enterprise inquiries are not open yet. Please try again later.')
     if body.website:
         return {'accepted': True}
+    require_business_email(str(body.email))
     if not body.consent:
         raise HTTPException(400, 'Please agree to be contacted about your request')
     details = body.model_dump(exclude={'website', 'consent'})

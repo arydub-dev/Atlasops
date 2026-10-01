@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Activity,
@@ -174,6 +175,8 @@ const CONNECTORS = [
   "Excel",
 ];
 
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
 export default function LandingPage() {
   return (
     <>
@@ -195,8 +198,8 @@ export default function LandingPage() {
               </Reveal>
               <Reveal delay={80}>
                 <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                  Detect disruptions. Understand impact.{" "}
-                  <span className="text-gradient">Decide what to do next.</span>
+                  Supply chain intelligence.{" "}
+                  <span className="text-gradient">Decisions that move you forward.</span>
                 </h1>
               </Reveal>
               <Reveal delay={160}>
@@ -209,10 +212,10 @@ export default function LandingPage() {
               <Reveal delay={240}>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <PrimaryButton href="/get-started">
-                    Start Free Demo
+                    Try for free
                   </PrimaryButton>
-                  <SecondaryButton href="/get-started">
-                    Book a Demo
+                  <SecondaryButton href="/contact">
+                    Connect with us
                   </SecondaryButton>
                 </div>
               </Reveal>

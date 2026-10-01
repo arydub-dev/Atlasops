@@ -50,9 +50,27 @@ test("demo inquiry has clear success and failure states", async ({ page }) => {
   await page.getByLabel("Company size", { exact: true }).fill("20");
   await page.getByLabel("What is your main operational challenge?").fill("Inventory shortages across warehouses");
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Request a demo" }).click();
+  await page.getByRole("button", { name: "Request enterprise access" }).click();
   await expect(page.getByRole("status")).toContainText("has been saved");
   await page.route("**/api/v1/leads", route => route.fulfill({ status: 503, json: { detail: "Not configured" } }));
-  await page.getByRole("button", { name: "Request a demo" }).click();
+  await page.getByRole("button", { name: "Request enterprise access" }).click();
   await expect(page.getByRole("status")).toContainText("not open yet");
+});
+
+
+test("company signup rejects personal email before redirect", async ({ page }) => {
+  await page.goto("/login?signup=1");
+  await page.getByLabel("Work email", { exact: true }).fill("person@gmail.com");
+  await page.getByRole("button", { name: /^Continue$/ }).click();
+  await expect(page.getByText(/Personal email addresses are not accepted for signup/)).toBeVisible();
+  await expect(page).toHaveURL(/signup=1/);
+});
+
+test("features and search identity are discoverable", async ({ page, request }) => {
+  await page.goto("/features");
+  await expect(page.getByRole("heading", {name: "Shipment visibility"})).toBeVisible();
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://www.atlasops.online/features");
+  expect((await request.get("/favicon.png")).status()).toBe(200);
+  const sitemap = await request.get("/sitemap.xml");
+  expect(await sitemap.text()).toContain("https://www.atlasops.online/contact");
 });

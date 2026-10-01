@@ -1,8 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL, IS_PREVIEW } from "@/lib/site";
 export default function robots(): MetadataRoute.Robots {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL;
-  return {
-    rules: origin ? { userAgent: "*", allow: ["/", "/platform", "/solutions", "/pricing"], disallow: ["/admin", "/settings", "/onboarding", "/mission-control", "/privacy", "/terms"] } : { userAgent: "*", disallow: "/" },
-    ...(origin ? { sitemap: `${origin.replace(/\/$/, "")}/sitemap.xml` } : {}),
-  };
+ return { rules: IS_PREVIEW ? {userAgent: "*", disallow: "/"} : {userAgent: "*", allow: "/", disallow: ["/api/", "/admin", "/settings", "/onboarding", "/mission-control", "/login", "/auth/", "/privacy", "/terms"]}, ...(!IS_PREVIEW ? {sitemap: `${SITE_URL}/sitemap.xml`} : {}) };
 }

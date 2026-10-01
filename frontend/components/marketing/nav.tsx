@@ -9,11 +9,11 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/solutions", label: "Solutions" },
-  { href: "/platform", label: "Platform" },
+  { href: "/features", label: "Features" },
   { href: "/integrations", label: "Integrations" },
   { href: "/security", label: "Security" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/docs", label: "Documentation" },
+  { href: "/contact", label: "Connect with us" },
   { href: "/about", label: "About" },
 ];
 
@@ -72,7 +72,7 @@ export function MarketingNav() {
             href="/get-started"
             className="group inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:shadow-md hover:brightness-110"
           >
-            Get Started
+            Try for free
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
@@ -118,7 +118,7 @@ export function MarketingNav() {
               onClick={() => setOpen(false)}
               className="rounded-lg bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground"
             >
-              Get Started
+              Try for free
             </Link>
           </div>
         </nav>

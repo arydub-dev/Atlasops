@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.core.rate_limit import rate_limit_auth
 from app.identity import workos as workos_client
 from app.identity.device import device_label_from_ua
+from app.core.business_email import require_business_email
 from app.identity.discovery import discover_organization
 from app.identity.oauth_state import consume_login_state, create_login_state, safe_return_path
 from app.identity.orgs import accept_invitation, create_organization, get_membership
@@ -144,6 +145,7 @@ def _upsert_workos_user(db: Session, profile: dict) -> User:
     )
     now = _utcnow()
     if user is None:
+        require_business_email(email)
         user = User(
             workos_user_id=workos_user_id,
             email=email,
@@ -203,6 +205,9 @@ def continue_login(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Enterprise sign-in is not configured. Use local development sign-in.",
         )
+
+    if db.scalar(select(User.id).where(User.email == str(payload.email).lower().strip())) is None:
+        require_business_email(str(payload.email))
 
     try:
         discovery = discover_organization(
