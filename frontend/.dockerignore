@@ -6,3 +6,8 @@ dist
 .env.local
 npm-debug.log
 README.md
+
+.env*
+!.env.example
+*.pem
+*.key

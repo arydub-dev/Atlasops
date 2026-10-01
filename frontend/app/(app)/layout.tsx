@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
 import { Sparkles } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { LoadingState } from "@/components/shared/states";
 import { useDemoMode } from "@/lib/demo-mode";
 import { cn } from "@/lib/utils";
 
+const DEMO_SANDBOX = process.env.NEXT_PUBLIC_DEMO_SANDBOX === "true";
+
 function DemoBanner() {
   const { enabled } = useDemoMode();
-  if (!enabled) return null;
+  if (!DEMO_SANDBOX || !enabled) return null;
   return (
     <div className="no-print flex items-center justify-center gap-2 border-b border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary">
       <Sparkles className="h-3.5 w-3.5" />
@@ -22,15 +24,22 @@ function DemoBanner() {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, currentOrganization, loading } = useAuth();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (!currentOrganization) {
+      router.replace("/onboarding");
+    }
+  }, [loading, user, currentOrganization, router]);
 
-  if (loading || !user) {
+  if (loading || !user || !currentOrganization) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <LoadingState label="Authenticating…" />
@@ -44,7 +53,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar />
       </div>
 
-      {/* Mobile drawer */}
       <div
         className={cn(
           "fixed inset-0 z-50 lg:hidden",

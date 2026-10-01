@@ -7,29 +7,34 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models import Inventory, Product, Shipment, Supplier, User, Warehouse
-from app.models.enums import ShipmentStatus
+from app.api.deps import get_db_with_tenant, require_permission
+from app.models import Inventory, Product, Shipment, Supplier, Warehouse
 from app.services import metrics
+from app.tenancy.context import TenantContext
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 @router.get("/delivery", response_model=dict)
 def delivery_performance(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("analytics.read")),
 ) -> dict:
     status_counts = dict(
-        db.execute(select(Shipment.status, func.count(Shipment.id)).group_by(Shipment.status)).all()
+        db.execute(
+            select(Shipment.status, func.count(Shipment.id))
+            .where(Shipment.organization_id == ctx.organization_id)
+            .group_by(Shipment.status)
+        ).all()
     )
     carrier_rows = db.execute(
         select(
             Shipment.carrier,
             func.count(Shipment.id),
             func.avg(Shipment.delay_days),
-        ).group_by(Shipment.carrier)
+        )
+        .where(Shipment.organization_id == ctx.organization_id)
+        .group_by(Shipment.carrier)
     ).all()
     carriers = [
         {
@@ -41,16 +46,16 @@ def delivery_performance(
     ]
     return {
         "status_breakdown": {k.value: v for k, v in status_counts.items()},
-        "shipment_trend": metrics.shipment_trend(db),
-        "delay_trend": metrics.delay_trend(db),
+        "shipment_trend": metrics.shipment_trend(db, ctx.organization_id),
+        "delay_trend": metrics.delay_trend(db, ctx.organization_id),
         "carrier_performance": carriers,
     }
 
 
 @router.get("/suppliers", response_model=dict)
 def supplier_analytics(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("analytics.read")),
 ) -> dict:
     region_rows = db.execute(
         select(
@@ -58,7 +63,9 @@ def supplier_analytics(
             func.avg(Supplier.supplier_score),
             func.avg(Supplier.delivery_reliability),
             func.count(Supplier.id),
-        ).group_by(Supplier.region)
+        )
+        .where(Supplier.organization_id == ctx.organization_id)
+        .group_by(Supplier.region)
     ).all()
     regions = [
         {
@@ -69,10 +76,20 @@ def supplier_analytics(
         }
         for r, score, rel, n in region_rows
     ]
-    top = db.scalars(select(Supplier).order_by(Supplier.supplier_score.desc()).limit(10)).all()
-    bottom = db.scalars(select(Supplier).order_by(Supplier.supplier_score.asc()).limit(10)).all()
+    top = db.scalars(
+        select(Supplier)
+        .where(Supplier.organization_id == ctx.organization_id)
+        .order_by(Supplier.supplier_score.desc())
+        .limit(10)
+    ).all()
+    bottom = db.scalars(
+        select(Supplier)
+        .where(Supplier.organization_id == ctx.organization_id)
+        .order_by(Supplier.supplier_score.asc())
+        .limit(10)
+    ).all()
     return {
-        "performance_trend": metrics.supplier_performance_trend(db),
+        "performance_trend": metrics.supplier_performance_trend(db, ctx.organization_id),
         "by_region": regions,
         "top_performers": [{"name": s.name, "score": round(s.supplier_score, 1)} for s in top],
         "bottom_performers": [{"name": s.name, "score": round(s.supplier_score, 1)} for s in bottom],
@@ -81,16 +98,17 @@ def supplier_analytics(
 
 @router.get("/inventory", response_model=dict)
 def inventory_analytics(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("analytics.read")),
 ) -> dict:
-    # Heat map: utilization per warehouse region
     wh_rows = db.execute(
         select(
             Warehouse.region,
             func.avg(Warehouse.current_inventory * 100.0 / Warehouse.capacity),
             func.count(Warehouse.id),
-        ).group_by(Warehouse.region)
+        )
+        .where(Warehouse.organization_id == ctx.organization_id)
+        .group_by(Warehouse.region)
     ).all()
     heatmap = [
         {"region": r, "avg_utilization": round(float(util or 0), 1), "warehouses": n}
@@ -99,6 +117,7 @@ def inventory_analytics(
     category_rows = db.execute(
         select(Product.category, func.sum(Inventory.quantity))
         .join(Inventory, Inventory.product_id == Product.id)
+        .where(Product.organization_id == ctx.organization_id)
         .group_by(Product.category)
     ).all()
     by_category = [
@@ -106,8 +125,8 @@ def inventory_analytics(
         for c, qty in sorted(category_rows, key=lambda x: x[1] or 0, reverse=True)
     ]
     return {
-        "health_breakdown": metrics.inventory_health_breakdown(db),
-        "utilization_trend": metrics.inventory_trend(db),
+        "health_breakdown": metrics.inventory_health_breakdown(db, ctx.organization_id),
+        "utilization_trend": metrics.inventory_trend(db, ctx.organization_id),
         "utilization_heatmap": heatmap,
         "inventory_by_category": by_category,
     }
@@ -115,15 +134,13 @@ def inventory_analytics(
 
 @router.get("/forecast", response_model=dict)
 def forecast_analytics(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("analytics.read")),
     horizon_weeks: int = Query(8, ge=2, le=26),
 ) -> dict:
-    """Simple demand forecast extrapolated from recent shipment volume."""
-    history = metrics.shipment_trend(db, weeks=12)
+    history = metrics.shipment_trend(db, ctx.organization_id, weeks=12)
     recent = [h["shipped"] for h in history[-6:]] or [0]
     avg = sum(recent) / len(recent) if recent else 0
-    # linear trend slope from recent points
     slope = (recent[-1] - recent[0]) / max(len(recent) - 1, 1) if len(recent) > 1 else 0
 
     forecast = []
@@ -132,7 +149,6 @@ def forecast_analytics(
         dt = last_label_dt + timedelta(weeks=i)
         iso = dt.isocalendar()
         projected = max(0, avg + slope * i)
-        # widen confidence band with horizon
         band = projected * (0.08 + 0.02 * i)
         forecast.append(
             {

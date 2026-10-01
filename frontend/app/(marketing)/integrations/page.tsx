@@ -28,24 +28,24 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Integrations",
   description:
-    "Connect ATLASOPS with SAP, Oracle, Salesforce, Microsoft Dynamics, WMS, TMS and any REST API, plus self-serve CSV and Excel import.",
+    "Connect ATLASOPS with Dynamics 365 Business Central, Salesforce, and UPS (Beta), plus self-serve CSV and Excel import. Additional ERPs coming soon.",
 };
 
 const CONNECTORS: {
   name: string;
   kind: string;
-  status: "Self-serve" | "Available";
+  status: "Self-serve" | "Available" | "Beta" | "Coming Soon";
   note: string;
 }[] = [
   { name: "CSV Import", kind: "File", status: "Self-serve", note: "Drag-and-drop, mapping, validation" },
   { name: "Excel Import", kind: "File", status: "Self-serve", note: "Worksheet selection & mapping" },
-  { name: "REST API", kind: "API", status: "Available", note: "Connect any RESTful endpoint" },
-  { name: "SAP S/4HANA", kind: "ERP", status: "Available", note: "Connect with our team" },
-  { name: "Oracle ERP", kind: "ERP", status: "Available", note: "Connect with our team" },
-  { name: "Salesforce", kind: "CRM", status: "Available", note: "Connect with our team" },
-  { name: "Microsoft Dynamics", kind: "ERP/CRM", status: "Available", note: "Connect with our team" },
-  { name: "Warehouse Mgmt (WMS)", kind: "WMS", status: "Available", note: "Connect with our team" },
-  { name: "Transportation Mgmt (TMS)", kind: "TMS", status: "Available", note: "Connect with our team" },
+  { name: "Microsoft Dynamics 365 BC", kind: "ERP", status: "Beta", note: "OAuth + companies, items, sales orders" },
+  { name: "Salesforce", kind: "CRM", status: "Beta", note: "OAuth + Account/Opportunity → suppliers" },
+  { name: "UPS Tracking", kind: "TMS", status: "Beta", note: "OAuth + tracking updates on shipments" },
+  { name: "REST API", kind: "API", status: "Coming Soon", note: "Generic REST connector planned" },
+  { name: "SAP S/4HANA", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
+  { name: "Oracle ERP", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
+  { name: "Warehouse Mgmt (WMS)", kind: "WMS", status: "Coming Soon", note: "Not yet shipped" },
 ];
 
 const PIPELINE = [
@@ -70,7 +70,7 @@ export default function IntegrationsPage() {
       <PageHero
         eyebrow="Integrations"
         title="Connect ATLASOPS to the systems you already run"
-        description="Integrate with SAP, Oracle, Salesforce, Microsoft Dynamics, your warehouse and transportation systems, and any REST API. Import from CSV and Excel yourself, and connect enterprise systems with help from our team."
+        description="Import from CSV and Excel yourself. Dynamics 365 Business Central, Salesforce, and UPS Tracking are in Beta. Additional ERP and WMS connectors are Coming Soon."
       >
         <PrimaryButton href="/get-started">Talk to us to connect</PrimaryButton>
       </PageHero>
@@ -81,11 +81,10 @@ export default function IntegrationsPage() {
           <Reveal className="mx-auto flex max-w-3xl items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-5">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <p className="text-sm leading-relaxed text-foreground">
-              CSV and Excel import are available self-serve — upload your data and
-              start immediately. Enterprise integrations (SAP, Oracle, Salesforce,
-              Microsoft Dynamics, WMS, TMS and REST APIs) are connected through a
-              guided onboarding with our team, who configure authentication,
-              endpoints and field mapping for your environment.{" "}
+              Status badges reflect what ships today: Self-serve file import,
+              Beta connectors for Dynamics BC, Salesforce, and UPS, and Coming Soon
+              for SAP, Oracle, generic REST, and WMS. Beta connectors use real OAuth
+              and live APIs when credentials are configured.{" "}
               <Link href="/get-started" className="font-medium text-primary hover:underline">
                 Get in touch to connect your systems.
               </Link>
@@ -125,9 +124,11 @@ export default function IntegrationsPage() {
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                      c.status === "Self-serve"
+                      c.status === "Self-serve" || c.status === "Available"
                         ? "bg-success/10 text-success"
-                        : "bg-primary/10 text-primary",
+                        : c.status === "Beta"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground",
                     )}
                   >
                     {c.status}

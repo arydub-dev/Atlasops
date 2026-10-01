@@ -8,15 +8,24 @@ import {
   Boxes,
   Clock,
   Factory,
+  GitBranch,
   PackageCheck,
+  Plug,
   Radar,
   ShieldAlert,
+  ShoppingCart,
+  Siren,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 import { useDemoMode } from "@/lib/demo-mode";
-import type { MissionControlResponse, RecommendedAction, SituationInsight } from "@/lib/types";
+import type {
+  MissionControlResponse,
+  RecommendedAction,
+  SituationInsight,
+  TimelineEvent,
+} from "@/lib/types";
 import { formatNumber, formatPercent, relativeTime } from "@/lib/format";
 import { CHART_COLORS } from "@/lib/constants";
 import { PageHeader } from "@/components/shared/page-header";
@@ -33,12 +42,19 @@ import { cn } from "@/lib/utils";
 
 export default function MissionControlPage() {
   const { enabled: demo } = useDemoMode();
-  const { data, loading, error } = useFetch<MissionControlResponse>("/mission-control", [demo]);
+  const { data, loading, error, refetch } = useFetch<MissionControlResponse>("/mission-control", [demo]);
 
   if (loading) return <MissionSkeleton />;
-  if (error || !data) return <ErrorState message={error || "No mission control data"} />;
+  if (error || !data)
+    return (
+      <ErrorState
+        message={error || "No mission control data"}
+        onRetry={() => refetch()}
+      />
+    );
 
   const k = data.kpis;
+  const situation = data.ai_situation_report || data.situation_report;
   const now = new Date().toLocaleString("en-US", {
     weekday: "long",
     month: "short",
@@ -51,7 +67,7 @@ export default function MissionControlPage() {
     <div className="space-y-6">
       <PageHeader
         title="Mission Control"
-        description={`Operational command surface · ${now}`}
+        description={`Executive command centre · ${now}`}
       >
         <Badge variant="success" className="gap-1.5">
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
@@ -102,7 +118,13 @@ export default function MissionControlPage() {
             intent={k.supplier_reliability_score >= 80 ? "success" : "warning"}
             sub="avg score / 100"
           />
-          <Kpi label="Open Alerts" value={formatNumber(k.open_alerts)} icon={AlertTriangle} intent={k.open_alerts > 0 ? "warning" : "success"} sub="awaiting triage" />
+          <Kpi
+            label="Data Health"
+            value={formatNumber(data.data_health?.score ?? 0)}
+            icon={Activity}
+            intent={(data.data_health?.score ?? 100) >= 80 ? "success" : "warning"}
+            sub={`grade ${data.data_health?.grade ?? "—"}`}
+          />
         </div>
       </div>
 
@@ -110,16 +132,77 @@ export default function MissionControlPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <SituationReportCard
           className="lg:col-span-7"
-          headline={data.situation_report.headline}
-          insights={data.situation_report.insights}
+          headline={situation.headline}
+          insights={situation.insights}
         />
         <RecommendedActions className="lg:col-span-5" actions={data.recommended_actions} />
       </div>
 
-      {/* SECTION 4 — Critical alerts */}
+      {/* SECTION 4 — Live operations grid */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <RiskHeatmapCard className="lg:col-span-3" heatmap={data.risk_heatmap} />
+        <OrdersPanel
+          className="lg:col-span-3"
+          title="Purchase Orders"
+          icon={ShoppingCart}
+          openCount={data.purchase_orders?.open_count ?? k.open_purchase_orders ?? 0}
+          recent={data.purchase_orders?.recent ?? []}
+        />
+        <OrdersPanel
+          className="lg:col-span-3"
+          title="Sales Orders"
+          icon={PackageCheck}
+          openCount={data.sales_orders?.open_count ?? k.open_sales_orders ?? 0}
+          recent={(data.sales_orders?.recent ?? []).map((r) => ({
+            id: r.id,
+            reference: r.reference,
+            status: r.status,
+            total_amount: r.total_amount,
+          }))}
+        />
+        <UpcomingRisksCard className="lg:col-span-3" risks={data.upcoming_risks ?? []} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <IncidentsPanel className="lg:col-span-4" incidents={data.top_incidents ?? []} />
+        <ConnectorStatusPanel className="lg:col-span-4" status={data.connector_status} />
+        <GraphStatsPanel className="lg:col-span-4" graph={data.graph} />
+      </div>
+
+      <OperationalTimelinePanel events={data.operational_timeline ?? []} />
+
+      {(data.predictions?.length || 0) > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-sm">Predictive Intelligence</CardTitle>
+            <Link href="/predictions">
+              <Button variant="ghost" size="sm">
+                All <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {(data.predictions || []).slice(0, 6).map((p) => (
+              <div key={p.id} className="rounded-md border border-border/60 p-3">
+                <div className="flex justify-between gap-2">
+                  <p className="text-xs font-medium leading-snug">{p.title}</p>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {Math.round(p.confidence * 100)}%
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] uppercase text-muted-foreground">
+                  {p.kind.replace(/_/g, " ")}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SECTION 5 — Critical alerts */}
       <CriticalAlertsFeed alerts={data.critical_alerts} />
 
-      {/* SECTION 5 — Operational trends (supporting, lower) */}
+      {/* SECTION 6 — Operational trends (supporting, lower) */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-muted-foreground" />
@@ -260,7 +343,7 @@ function SituationReportCard({
           </span>
           <div>
             <CardTitle className="text-sm">AI Situation Report</CardTitle>
-            <p className="text-[11px] text-muted-foreground">What is happening · why it's happening</p>
+            <p className="text-[11px] text-muted-foreground">What is happening · why it&apos;s happening</p>
           </div>
         </div>
       </CardHeader>
@@ -299,8 +382,19 @@ function RecommendedActions({
         {actions.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">No actions required.</p>
         )}
-        {actions.map((a, i) => (
-          <div key={i} className="rounded-lg border border-border/60 p-3 transition-colors hover:bg-accent/40">
+        {actions.map((a, i) => {
+          const href =
+            a.category === "supplier" || a.entity_type === "supplier"
+              ? "/suppliers"
+              : a.category === "shipment" || a.entity_type === "shipment"
+                ? "/shipments"
+                : a.category === "inventory" || a.entity_type === "inventory"
+                  ? "/inventory"
+                  : a.entity_type === "alert"
+                    ? "/alerts"
+                    : "/risk";
+          return (
+          <Link key={i} href={href} className="block rounded-lg border border-border/60 p-3 transition-colors hover:bg-accent/40">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-start gap-2.5">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
@@ -310,22 +404,317 @@ function RecommendedActions({
               </div>
               <PriorityBadge priority={a.priority as never} />
             </div>
-            <p className="mt-1.5 pl-8 text-xs leading-snug text-muted-foreground">{a.detail}</p>
+            <p className="mt-1.5 pl-8 text-xs leading-snug text-muted-foreground">
+              {a.reason || a.detail}
+            </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-8">
               <span className="inline-flex items-center gap-1 rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-                <TrendingUp className="h-3 w-3" /> {a.expected_impact}
+                <TrendingUp className="h-3 w-3" /> {a.estimated_impact || a.expected_impact}
               </span>
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                 Est. cost: {a.estimated_cost}
               </span>
+              {typeof a.confidence === "number" ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Confidence {(a.confidence * 100).toFixed(0)}%
+                </span>
+              ) : null}
+              {a.estimate_label ? (
+                <span className="text-[10px] text-muted-foreground">Modeled estimate</span>
+              ) : null}
             </div>
-          </div>
-        ))}
+          </Link>
+          );
+        })}
         <Link href="/risk" className="block">
           <Button variant="outline" size="sm" className="w-full">
             View full risk center <ArrowRight className="h-3.5 w-3.5" />
           </Button>
         </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* --------------------------- Phase B panels ----------------------------- */
+function RiskHeatmapCard({
+  heatmap,
+  className,
+}: {
+  heatmap?: Record<string, number>;
+  className?: string;
+}) {
+  const entries = Object.entries(heatmap || {}).sort((a, b) => b[1] - a[1]);
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Risk Heatmap</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {entries.length === 0 && (
+          <p className="py-6 text-center text-xs text-muted-foreground">No scored categories</p>
+        )}
+        {entries.map(([cat, score]) => (
+          <div key={cat}>
+            <div className="mb-1 flex justify-between text-xs">
+              <span className="capitalize text-muted-foreground">{cat.replace(/_/g, " ")}</span>
+              <span className="tabular-nums font-medium">{score.toFixed(0)}</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  score >= 70 ? "bg-destructive" : score >= 45 ? "bg-warning" : "bg-success"
+                )}
+                style={{ width: `${Math.min(100, score)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrdersPanel({
+  title,
+  icon: Icon,
+  openCount,
+  recent,
+  className,
+}: {
+  title: string;
+  icon: typeof ShoppingCart;
+  openCount: number;
+  recent: { id: string; reference: string; status: string; total_amount: number }[];
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {title}
+        </CardTitle>
+        <Badge variant="secondary">{openCount} open</Badge>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {recent.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">No recent orders</p>
+        )}
+        {recent.map((o) => (
+          <div key={o.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="truncate font-medium">{o.reference}</span>
+            <span className="shrink-0 text-muted-foreground">{o.status}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UpcomingRisksCard({
+  risks,
+  className,
+}: {
+  risks: { title: string; score: number; level: string }[];
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Upcoming Risks</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        {risks.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">No elevated risks</p>
+        )}
+        {risks.map((r, i) => (
+          <div key={i} className="rounded-md border border-border/60 p-2">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-medium leading-snug">{r.title}</p>
+              <span className="tabular-nums text-xs text-muted-foreground">{r.score}</span>
+            </div>
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">{r.level}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function IncidentsPanel({
+  incidents,
+  className,
+}: {
+  incidents: { id: string; title: string; severity: string; status: string }[];
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Siren className="h-4 w-4 text-destructive" />
+          Top Incidents
+        </CardTitle>
+        <Link href="/incidents">
+          <Button variant="ghost" size="sm">
+            All <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {incidents.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">No open incidents</p>
+        )}
+        {incidents.map((inc) => (
+          <Link
+            key={inc.id}
+            href={`/incidents/${inc.id}`}
+            className="block rounded-md border border-border/60 p-2 transition-colors hover:bg-accent/40"
+          >
+            <p className="text-xs font-medium leading-snug">{inc.title}</p>
+            <div className="mt-1 flex gap-2 text-[10px] uppercase text-muted-foreground">
+              <span>{inc.severity}</span>
+              <span>·</span>
+              <span>{inc.status}</span>
+            </div>
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectorStatusPanel({
+  status,
+  className,
+}: {
+  status: MissionControlResponse["connector_status"];
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Plug className="h-4 w-4 text-muted-foreground" />
+          Connector Status
+        </CardTitle>
+        <Link href="/data-sources/connectors">
+          <Button variant="ghost" size="sm">
+            Manage <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-md bg-muted/40 p-2">
+            <p className="text-lg font-semibold tabular-nums">{status?.total ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground">Total</p>
+          </div>
+          <div className="rounded-md bg-success/10 p-2">
+            <p className="text-lg font-semibold tabular-nums text-success">{status?.healthy ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground">Healthy</p>
+          </div>
+          <div className="rounded-md bg-destructive/10 p-2">
+            <p className="text-lg font-semibold tabular-nums text-destructive">{status?.error ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground">Error</p>
+          </div>
+        </div>
+        {(status?.items ?? []).slice(0, 4).map((c) => (
+          <div key={c.id} className="flex items-center justify-between text-xs">
+            <span className="truncate font-medium">{c.name}</span>
+            <Badge variant={c.status === "error" ? "destructive" : "secondary"} className="text-[10px]">
+              {c.status}
+            </Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GraphStatsPanel({
+  graph,
+  className,
+}: {
+  graph: MissionControlResponse["graph"];
+  className?: string;
+}) {
+  const counts = Object.entries(graph?.node_counts || {}).slice(0, 6);
+  return (
+    <Card className={className}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <GitBranch className="h-4 w-4 text-muted-foreground" />
+          Knowledge Graph
+        </CardTitle>
+        <Link href="/graph">
+          <Button variant="ghost" size="sm">
+            Explore <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-3 flex gap-4 text-xs">
+          <span>
+            <span className="font-semibold tabular-nums">{graph?.total_nodes ?? 0}</span> nodes
+          </span>
+          <span>
+            <span className="font-semibold tabular-nums">{graph?.total_edges ?? 0}</span> edges
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {counts.map(([type, n]) => (
+            <div key={type} className="rounded-md border border-border/60 px-2 py-1.5 text-xs">
+              <span className="capitalize text-muted-foreground">{type.replace(/_/g, " ")}</span>
+              <span className="ml-2 font-medium tabular-nums">{n}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OperationalTimelinePanel({ events }: { events: TimelineEvent[] }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          Operational Timeline
+        </CardTitle>
+        <Link href="/graph">
+          <Button variant="ghost" size="sm">
+            Full timeline <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {events.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No recent operational events</p>
+        ) : (
+          <ol className="relative space-y-0 border-l border-border/70 pl-4">
+            {events.slice(0, 10).map((e) => (
+              <li key={e.id} className="relative pb-4 last:pb-0">
+                <span className="absolute -left-[1.3rem] top-1.5 h-2 w-2 rounded-full bg-primary" />
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium leading-snug">{e.title}</p>
+                  {e.occurred_at && (
+                    <span className="text-[11px] text-muted-foreground">{relativeTime(e.occurred_at)}</span>
+                  )}
+                </div>
+                {e.summary && <p className="mt-0.5 text-xs text-muted-foreground">{e.summary}</p>}
+                <div className="mt-1 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {e.entity_type && <span>{e.entity_type}</span>}
+                  {e.severity && <span>{e.severity}</span>}
+                  {e.source && <span>{e.source}</span>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </CardContent>
     </Card>
   );

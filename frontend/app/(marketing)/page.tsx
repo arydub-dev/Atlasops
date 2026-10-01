@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Activity,
@@ -44,8 +45,8 @@ const TRUST = [
   { icon: Cable, label: "API-first" },
   { icon: Cloud, label: "Cloud-native" },
   { icon: ShieldCheck, label: "Secure by design" },
-  { icon: Network, label: "Multi-tenant ready" },
-  { icon: GitBranch, label: "Production-ready deployment" },
+  { icon: Network, label: "Multi-tenant (Available)" },
+  { icon: GitBranch, label: "Deployable with Docker Compose" },
 ];
 
 const PROBLEMS = [
@@ -174,6 +175,8 @@ const CONNECTORS = [
   "Excel",
 ];
 
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
 export default function LandingPage() {
   return (
     <>
@@ -185,31 +188,34 @@ export default function LandingPage() {
           <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1.2fr] lg:gap-8">
             <div>
               <Reveal>
-                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
+                <p className="text-sm font-semibold tracking-wide text-foreground">
+                  ATLASOPS
+                </p>
+                <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
                   <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                  Operational intelligence platform
+                  The decision layer for supply-chain operations
                 </span>
               </Reveal>
               <Reveal delay={80}>
                 <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                  Operational Intelligence for{" "}
-                  <span className="text-gradient">Modern Supply Chains</span>
+                  Supply chain intelligence.{" "}
+                  <span className="text-gradient">Decisions that move you forward.</span>
                 </h1>
               </Reveal>
               <Reveal delay={160}>
                 <p className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-                  Unify operational data, monitor risk, coordinate decisions, and
-                  transform fragmented supply chain information into actionable
-                  intelligence.
+                  Connect your operational systems. Build a live operational model.
+                  Trace downstream business impact and get recommended actions —
+                  without replacing your ERP, WMS, or TMS.
                 </p>
               </Reveal>
               <Reveal delay={240}>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <PrimaryButton href="/get-started">
-                    Start Free Demo
+                    Try for free
                   </PrimaryButton>
-                  <SecondaryButton href="/get-started">
-                    Book a Demo
+                  <SecondaryButton href="/contact">
+                    Connect with us
                   </SecondaryButton>
                 </div>
               </Reveal>
@@ -226,7 +232,7 @@ export default function LandingPage() {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Network className="h-3.5 w-3.5 text-primary" /> Multi-tenant
-                    ready
+                    available
                   </span>
                 </div>
               </Reveal>

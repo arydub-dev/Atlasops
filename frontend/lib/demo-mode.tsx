@@ -19,9 +19,11 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   const [lastSeededAt, setLastSeededAt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window === "undefined") return;
+    const timeoutId = window.setTimeout(() => {
       setEnabled(window.localStorage.getItem(KEY) === "1");
-    }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const seedDisruptions = useCallback(async () => {

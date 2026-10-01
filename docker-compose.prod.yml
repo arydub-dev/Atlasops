@@ -1,0 +1,153 @@
+# Production-oriented Compose overlay
+#
+# Usage:
+#   cp .env.example .env   # set ALL required secrets (no defaults)
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+# Boot will refuse to start if SESSION_SECRET / WorkOS / METRICS_TOKEN / etc. are missing
+# (see backend/app/core/startup_checks.py).
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set the public DNS hostname for automatic HTTPS}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
+  db:
+    restart: always
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production}
+
+  redis:
+    restart: always
+    ports: !reset []
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set for production}
+    command:
+      - sh
+      - -ec
+      - redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set a privileged migration-only database URL}
+      ENVIRONMENT: development
+      ALLOW_CREATE_ALL_ON_STARTUP: "false"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: always
+    ports: !reset []
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL:?Set a NOSUPERUSER NOBYPASSRLS runtime database URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set for production}@redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?CREDENTIALS_ENCRYPTION_KEY must be set}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:?WORKOS_API_KEY must be set}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:?WORKOS_CLIENT_ID must be set}
+      WORKOS_COOKIE_PASSWORD: ${WORKOS_COOKIE_PASSWORD:?WORKOS_COOKIE_PASSWORD must be set}
+      WORKOS_REDIRECT_URI: ${WORKOS_REDIRECT_URI:?WORKOS_REDIRECT_URI must be set}
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL must be set}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN must be set}
+      STRIPE_PRICE_STARTER_MONTHLY: ${STRIPE_PRICE_STARTER_MONTHLY:-}
+      STRIPE_PRICE_STARTER_ANNUAL: ${STRIPE_PRICE_STARTER_ANNUAL:-}
+      STRIPE_PRICE_PROFESSIONAL_MONTHLY: ${STRIPE_PRICE_PROFESSIONAL_MONTHLY:-}
+      STRIPE_PRICE_PROFESSIONAL_ANNUAL: ${STRIPE_PRICE_PROFESSIONAL_ANNUAL:-}
+      STRIPE_PRICE_ENTERPRISE_MONTHLY: ${STRIPE_PRICE_ENTERPRISE_MONTHLY:-}
+      STRIPE_PRICE_AI_CREDIT: ${STRIPE_PRICE_AI_CREDIT:-}
+      LEAD_CAPTURE_ENABLED: ${LEAD_CAPTURE_ENABLED:-false}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-20}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-1200}
+      AI_MAX_CONTEXT_CHARS: ${AI_MAX_CONTEXT_CHARS:-40000}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ALLOW_CREATE_ALL_ON_STARTUP: "false"
+      CONNECTOR_SYNC_INLINE: "false"
+      FEATURE_DEMO_SANDBOX: "false"
+      FEATURE_BILLING_ENFORCE: "true"
+      SEED_ON_STARTUP: "false"
+      SESSION_COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      ENABLE_API_DOCS: "false"
+      CSRF_ORIGIN_CHECK: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  worker:
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.worker.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: always
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL:?Set a NOSUPERUSER NOBYPASSRLS runtime database URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set for production}@redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?CREDENTIALS_ENCRYPTION_KEY must be set}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ALLOW_CREATE_ALL_ON_STARTUP: "false"
+      CONNECTOR_SYNC_INLINE: "false"
+      FEATURE_DEMO_SANDBOX: "false"
+      FEATURE_BILLING_ENFORCE: "true"
+      SEED_ON_STARTUP: "false"
+
+  frontend:
+    restart: always
+    ports: !reset []
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set at build time}
+        NEXT_PUBLIC_DEV_LOGIN: "false"
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Set the public HTTPS site origin}
+    environment:
+      NEXT_PUBLIC_DEV_LOGIN: "false"
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:

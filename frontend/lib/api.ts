@@ -10,19 +10,19 @@ const API_BASE =
 
 const API_PREFIX = "/api/v1";
 
-const TOKEN_KEY = "scc_token";
+const ORG_KEY = "supply_org_id";
 
-export function getToken(): string | null {
+export function getOrgId(): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  return window.localStorage.getItem(ORG_KEY);
 }
 
-export function setToken(token: string) {
-  if (typeof window !== "undefined") window.localStorage.setItem(TOKEN_KEY, token);
+export function setOrgId(orgId: string) {
+  if (typeof window !== "undefined") window.localStorage.setItem(ORG_KEY, orgId);
 }
 
-export function clearToken() {
-  if (typeof window !== "undefined") window.localStorage.removeItem(TOKEN_KEY);
+export function clearOrgId() {
+  if (typeof window !== "undefined") window.localStorage.removeItem(ORG_KEY);
 }
 
 export class ApiError extends Error {
@@ -38,6 +38,40 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   auth?: boolean;
 }
 
+function orgHeaders(): Record<string, string> {
+  const orgId = getOrgId();
+  return orgId ? { "X-Organization-Id": orgId } : {};
+}
+
+function shouldRedirectOn401(): boolean {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  // Stay put on public / auth / onboarding surfaces — /auth/me 401 is expected there.
+  if (
+    path === "/" ||
+    path.startsWith("/login") ||
+    path.startsWith("/auth/") ||
+    path.startsWith("/invite/") ||
+    path.startsWith("/onboarding") ||
+    path.startsWith("/get-started") ||
+    path.startsWith("/platform") ||
+    path.startsWith("/solutions") ||
+    path.startsWith("/pricing") ||
+    path.startsWith("/product") ||
+    path.startsWith("/company") ||
+    path.startsWith("/legal") ||
+    path.startsWith("/blog") ||
+    path.startsWith("/docs") ||
+    path.startsWith("/contact") ||
+    path.startsWith("/security") ||
+    path.startsWith("/about") ||
+    path.startsWith("/integrations")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, auth = true, headers, ...rest } = options;
   const finalHeaders: Record<string, string> = {
@@ -45,20 +79,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     ...(headers as Record<string, string>),
   };
   if (auth) {
-    const token = getToken();
-    if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
+    Object.assign(finalHeaders, orgHeaders());
   }
 
   const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, {
     ...rest,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: "include",
     cache: "no-store",
   });
 
   if (res.status === 401 && typeof window !== "undefined") {
-    clearToken();
-    if (!window.location.pathname.startsWith("/login")) {
+    clearOrgId();
+    if (shouldRedirectOn401()) {
+      // Centralized fetch helpers live outside React components, so router hooks
+      // are unavailable here. A hard redirect is the safest fallback on 401.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = "/login";
     }
   }
@@ -79,20 +116,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
-  const headers: Record<string, string> = {};
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = { ...orgHeaders() };
 
   const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, {
     method: "POST",
     headers, // do NOT set Content-Type; browser sets multipart boundary
     body: formData,
+    credentials: "include",
     cache: "no-store",
   });
 
   if (res.status === 401 && typeof window !== "undefined") {
-    clearToken();
-    if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    clearOrgId();
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (shouldRedirectOn401()) window.location.href = "/login";
   }
   if (!res.ok) {
     let detail = res.statusText;
@@ -116,28 +153,5 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
   upload: <T>(path: string, formData: FormData) => uploadRequest<T>(path, formData),
 };
-
-export async function login(email: string, password: string): Promise<string> {
-  const form = new URLSearchParams();
-  form.set("username", email);
-  form.set("password", password);
-  const res = await fetch(`${API_BASE}${API_PREFIX}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
-  });
-  if (!res.ok) {
-    let detail = "Invalid credentials";
-    try {
-      detail = (await res.json()).detail || detail;
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(res.status, detail);
-  }
-  const data = await res.json();
-  setToken(data.access_token);
-  return data.access_token;
-}
 
 export { API_BASE };

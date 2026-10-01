@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
@@ -12,7 +13,13 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
   );
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
   return (
     <Card className="flex flex-col items-center justify-center gap-2 py-16 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
@@ -20,6 +27,11 @@ export function ErrorState({ message }: { message: string }) {
       </div>
       <p className="text-sm font-medium">Something went wrong</p>
       <p className="max-w-md text-xs text-muted-foreground">{message}</p>
+      {onRetry && (
+        <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
     </Card>
   );
 }

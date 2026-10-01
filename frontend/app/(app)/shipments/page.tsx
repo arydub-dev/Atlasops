@@ -1,12 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpDown, Search } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
-import type { Page, Shipment, ShipmentStatus } from "@/lib/types";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
+import type { Page, Shipment } from "@/lib/types";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { ShipmentStatusBadge } from "@/components/shared/badges";
 import { Pagination } from "@/components/shared/pagination";
@@ -47,8 +46,6 @@ function ShipmentsInner() {
     return () => clearTimeout(t);
   }, [q]);
 
-  useEffect(() => setPage(1), [debouncedQ, status, sortBy, sortDir]);
-
   const query = new URLSearchParams({
     page: String(page),
     page_size: "20",
@@ -67,6 +64,7 @@ function ShipmentsInner() {
   ]);
 
   function toggleSort(field: string) {
+    setPage(1);
     if (sortBy === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -89,12 +87,21 @@ function ShipmentsInner() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search reference, origin, destination, carrier, location…"
                 className="pl-9"
               />
             </div>
-            <Select value={status} onValueChange={setStatus}>
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue />
               </SelectTrigger>

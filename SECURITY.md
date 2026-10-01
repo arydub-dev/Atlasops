@@ -1,78 +1,57 @@
-# Security Policy
-
-ATLASOPS is built on concrete, reviewable security controls. This document describes the
-controls implemented in the platform and how to report a vulnerability.
+# Security Policy — Supply v2
 
 ## Supported versions
 
-This project is pre-1.0. Security fixes are applied to the `main` branch. Pin to a commit
-or tag for reproducible deployments.
-
 | Version | Supported |
 | --- | --- |
-| `main` (latest) | Yes |
-| Older commits | Best effort |
+| `main` (v2) | Yes |
+| Pre-v2 single-tenant | No — upgrade required |
 
 ## Implemented controls
 
 ### Authentication & access
-- **JWT authentication** via an OAuth2 password flow; tokens are verified on every
-  authenticated request.
-- **Role-based access control** enforced per endpoint through a dependency factory
-  (`require_roles`), following the principle of least privilege.
-- **bcrypt password hashing** (via passlib); credentials are never stored in plaintext.
+- Email-first enterprise SSO via WorkOS (domain discovery; SAML/OIDC/IdPs configured in WorkOS — not exposed in UI)
+- OAuth `state` + PKCE (S256) on authorize/callback; open-redirect allowlist on return paths
+- Opaque httpOnly session cookies (not JWT); idle timeout, sliding expiry, remember-device TTL, concurrent session limits, revoke / logout-everywhere
+- Session metadata + admin Security dashboard (login history, org session revoke, allowed email domains)
+- API tokens (hashed) bound to organization (`token.organization_id`); header cannot switch orgs; no orphaned-user fallback
+- Enterprise RBAC via `require_permission(...)` on endpoints
+- Auth route rate limiting (`AUTH_RATE_LIMIT_PER_MINUTE`); `X-Forwarded-For` trusted only when `TRUST_PROXY=true`
+- Details: [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)
 
-### Data & input
-- **Input validation** with Pydantic v2 on all requests and ingestion rows.
-- **Audit logging** of sensitive actions to the `audit_logs` table.
-- **Connector secrets are masked** — only the last four characters of an API key are
-  retained for display.
+### Multi-tenancy
+- `organization_id` on tenant-owned rows
+- Request sets `app.current_org_id` for PostgreSQL RLS (hard-fail on Postgres if GUC cannot be set)
+- Cross-org path IDs on billing must match active tenant
+- Automated isolation + billing authz + API token tests in CI; Postgres RLS job in GitHub Actions
 
-### Transport & deployment
-- **TLS-ready.** The platform is designed to run behind a reverse proxy terminating TLS;
-  all client/API traffic should be encrypted in transit.
-- **CORS allow-listing.** Allowed origins are configured explicitly via `CORS_ORIGINS`;
-  wildcard origins should not be used in production.
-- **Environment-driven configuration.** Secrets are provided via environment variables;
-  no secrets are committed to the repository (`.env` is git-ignored, `.env.example`
-  contains placeholders only).
-- **Containerized deployment** with Docker for reproducible, isolated runtime environments.
+### Billing
+- All non-public billing routes require auth + `org.billing.manage`
+- Stripe return URLs restricted to `FRONTEND_URL` origin
+- Webhooks: signature required; tenant RLS context set; `stripe_events` idempotency
+- Plan enforcement helpers run when `FEATURE_BILLING_ENFORCE=true`
+
+### Data & secrets
+- Pydantic validation; Fernet credential encryption (JSON dict; legacy string blobs accepted)
+- Production boot refuses default `SESSION_SECRET`, missing encryption key, insecure cookie/CORS/seed flags
+- Append-oriented audit logs with integrity hash chaining (`app.services.audit.write_audit`)
+
+### Transport & observability
+- TLS at proxy; CORS allow-list with credentials
+- Security headers middleware
+- `/metrics` token-gated in production; OpenAPI disabled in production by default
 
 ## Deployment hardening checklist
 
-Before any non-local deployment:
+- [ ] Unique `SESSION_SECRET` (≥32) and `CREDENTIALS_ENCRYPTION_KEY`
+- [ ] WorkOS + Stripe production keys; webhook secrets verified
+- [ ] `SEED_ON_STARTUP=false`, `FEATURE_DEMO_SANDBOX=false`, `NEXT_PUBLIC_DEV_LOGIN=false`
+- [ ] `SESSION_COOKIE_SECURE=true`, `ALLOW_CREATE_ALL_ON_STARTUP=false`
+- [ ] `alembic upgrade head` (includes RLS + index migrations)
+- [ ] Restrict `CORS_ORIGINS`; set `FRONTEND_URL`
+- [ ] Set `METRICS_TOKEN`; set `TRUST_PROXY=true` only behind a trusted proxy
+- [ ] Managed Postgres backups ([DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md))
 
-- [ ] Set a strong, unique `JWT_SECRET_KEY` (32+ characters).
-- [ ] Set strong database credentials; never use the local development defaults.
-- [ ] Remove or replace the seeded demo accounts.
-- [ ] Serve all traffic over HTTPS (TLS at the proxy or platform layer).
-- [ ] Restrict `CORS_ORIGINS` to your real frontend domain(s).
-- [ ] Store connector credentials in a secrets manager rather than the database.
-- [ ] Review role assignments for least privilege.
+## Reporting
 
-## Known limitations
-
-These are documented honestly and tracked on the roadmap:
-
-- JWTs are stored in `localStorage` on the client, which is exposed to XSS; httpOnly
-  cookies are a planned hardening step.
-- Connector credentials are masked but not encrypted at rest.
-- There is no built-in rate limiting; add it at the proxy/gateway layer.
-- The platform is currently single-tenant; multi-tenant isolation is on the roadmap.
-
-## Reporting a vulnerability
-
-Please do not open public issues for security vulnerabilities.
-
-Instead, report them privately using GitHub's
-[private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
-on this repository (Security → Report a vulnerability).
-
-When reporting, please include:
-
-- A description of the vulnerability and its impact
-- Steps to reproduce
-- Affected component(s) and version/commit
-
-We aim to acknowledge reports within a reasonable timeframe and will coordinate
-disclosure once a fix is available.
+Email security issues privately to the maintainers. Do not file public issues for exploitable vulnerabilities.

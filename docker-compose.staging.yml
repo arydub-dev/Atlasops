@@ -1,0 +1,35 @@
+# Staging overlay — production-like local/staging stack.
+# Usage:
+#   cp .env.staging.example .env.staging
+#   # fill secrets, then:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml --env-file .env.staging up --build
+
+services:
+  backend:
+    environment:
+      ENVIRONMENT: staging
+      SESSION_COOKIE_SECURE: "true"
+      SEED_ON_STARTUP: "false"
+      FEATURE_DEMO_SANDBOX: "false"
+      ALLOW_CREATE_ALL_ON_STARTUP: "false"
+      CONNECTOR_SYNC_INLINE: "false"
+      FEATURE_BILLING_ENFORCE: ${FEATURE_BILLING_ENFORCE:-true}
+      TRUST_PROXY: "true"
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required for staging}
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    environment:
+      ENVIRONMENT: staging
+      SEED_ON_STARTUP: "false"
+      ALLOW_CREATE_ALL_ON_STARTUP: "false"
+      CONNECTOR_SYNC_INLINE: "false"
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_DEV_LOGIN: "false"
+    environment:
+      NEXT_PUBLIC_DEV_LOGIN: "false"

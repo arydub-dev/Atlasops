@@ -9,3 +9,8 @@ __pycache__/
 *.db
 .env
 smoke.db
+
+.env*
+!.env.example
+*.pem
+*.key

@@ -5,27 +5,29 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models import Alert, RiskAssessment, User
+from app.api.deps import get_db_with_tenant, require_permission
+from app.models import Alert
 from app.models.enums import AlertPriority, AlertStatus
 from app.schemas.entities import DashboardResponse, KPISet
 from app.services import metrics, risk_engine
+from app.tenancy.context import TenantContext
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("", response_model=DashboardResponse)
 def get_dashboard(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("analytics.read")),
 ) -> DashboardResponse:
-    kpis = metrics.compute_kpis(db)
+    org_id = ctx.organization_id
+    kpis = metrics.compute_kpis(db, org_id)
 
     critical_alerts = list(
         db.scalars(
             select(Alert)
             .where(
+                Alert.organization_id == org_id,
                 Alert.status != AlertStatus.RESOLVED,
                 Alert.priority.in_([AlertPriority.CRITICAL, AlertPriority.HIGH]),
             )
@@ -49,10 +51,10 @@ def get_dashboard(
 
     return DashboardResponse(
         kpis=KPISet(**kpis),
-        shipment_trend=metrics.shipment_trend(db),
-        inventory_trend=metrics.inventory_trend(db),
-        delay_trend=metrics.delay_trend(db),
-        supplier_performance_trend=metrics.supplier_performance_trend(db),
+        shipment_trend=metrics.shipment_trend(db, org_id),
+        inventory_trend=metrics.inventory_trend(db, org_id),
+        delay_trend=metrics.delay_trend(db, org_id),
+        supplier_performance_trend=metrics.supplier_performance_trend(db, org_id),
         critical_alerts=critical_alerts,
         top_risks=top_risks,
         recommended_actions=recommended_actions,

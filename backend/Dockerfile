@@ -16,11 +16,15 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
+RUN useradd --system --uid 10001 --create-home atlasops && chown -R atlasops:atlasops /app
+USER atlasops
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-    CMD curl -fsS "http://localhost:${PORT:-8000}/health" || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health/ready" || exit 1
 
 # Bind to the platform-provided $PORT when present (Render, Cloud Run, etc.),
 # falling back to 8000 for local Docker runs. Shell form enables env expansion.
+# Prefer platform dockerCommand to run Alembic before uvicorn in production.
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

@@ -49,7 +49,6 @@ export default function InventoryPage() {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
-  useEffect(() => setPage(1), [debouncedQ, status, warehouse]);
 
   const { data: warehouses } = useFetch<Warehouse[]>("/inventory/warehouses");
   const { data: health } = useFetch<Record<string, number>>("/inventory/health");
@@ -140,11 +139,20 @@ export default function InventoryPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search product name or SKU…"
               className="flex-1"
             />
-            <Select value={warehouse} onValueChange={setWarehouse}>
+            <Select
+              value={warehouse}
+              onValueChange={(value) => {
+                setWarehouse(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-52">
                 <SelectValue placeholder="Warehouse" />
               </SelectTrigger>
@@ -157,7 +165,13 @@ export default function InventoryPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={status} onValueChange={setStatus}>
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>

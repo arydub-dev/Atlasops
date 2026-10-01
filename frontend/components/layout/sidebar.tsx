@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -7,23 +8,36 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  Building2,
   Database,
   Factory,
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  Gauge,
+  GitBranch,
+  Handshake,
+  LayoutDashboard,
   type LucideIcon,
   Plug,
+  Puzzle,
   Radar,
+  Server,
   Settings,
   Share2,
+  Shield,
   ShieldAlert,
+  ShieldCheck,
+  Siren,
   Sparkles,
+  TrendingUp,
   Truck,
   Upload,
   Warehouse,
+  Workflow,
 } from "lucide-react";
-import { NAV_GROUPS } from "@/lib/constants";
+import { NAV_GROUPS, navVisibleForRole } from "@/lib/constants";
+import { useAuth } from "@/lib/auth";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 
@@ -41,15 +55,73 @@ const ICONS: Record<string, LucideIcon> = {
   Sparkles,
   FileText,
   Settings,
+  Shield,
   Database,
   Plug,
   Upload,
   FileSpreadsheet,
   Activity,
+  Siren,
+  GitBranch,
+  Gauge,
+  Puzzle,
+  Workflow,
+  TrendingUp,
+  LayoutDashboard,
+  Server,
+  Handshake,
+  Building2,
+  ShieldCheck,
 };
+
+type FeedState = "checking" | "online" | "degraded" | "offline";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { currentMembership, user } = useAuth();
+  const role = currentMembership?.role_slug;
+  const [feed, setFeed] = useState<FeedState>("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+    async function ping() {
+      try {
+        const res = await fetch(`${apiBase.replace(/\/$/, "")}/health/ready`, {
+          credentials: "omit",
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        setFeed(res.ok ? "online" : "degraded");
+      } catch {
+        if (!cancelled) setFeed("offline");
+      }
+    }
+
+    ping();
+    const id = window.setInterval(ping, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) =>
+      navVisibleForRole(item.access, role, { isPlatformAdmin: !!user?.is_platform_admin })
+    ),
+  })).filter((group) => group.items.length > 0);
+
+  const feedLabel =
+    feed === "online"
+      ? "API ready"
+      : feed === "degraded"
+        ? "API degraded"
+        : feed === "offline"
+          ? "API unreachable"
+          : "Checking API…";
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-border bg-card/40">
@@ -58,7 +130,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto p-3">
-        {NAV_GROUPS.map((group, gi) => (
+        {groups.map((group, gi) => (
           <div key={gi} className="space-y-1">
             {group.label && (
               <p className="section-label px-3 pb-1 pt-1">{group.label}</p>
@@ -66,7 +138,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {group.items.map((item) => {
               const Icon = ICONS[item.icon] ?? Radar;
               const active =
-                pathname === item.href || pathname.startsWith(item.href + "/");
+                pathname === item.href ||
+                (item.href !== "/settings" && pathname.startsWith(item.href + "/"));
               return (
                 <Link
                   key={item.href}
@@ -93,10 +166,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="border-t border-border p-4">
         <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">Operations Online</p>
+          <p className="font-medium text-foreground">Platform status</p>
           <p className="mt-0.5 flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-success" />
-            Live data feed active
+            <span
+              className={cn(
+                "inline-block h-2 w-2 rounded-full",
+                feed === "online" && "bg-success animate-pulse",
+                feed === "degraded" && "bg-warning",
+                feed === "offline" && "bg-destructive",
+                feed === "checking" && "bg-muted-foreground"
+              )}
+            />
+            {feedLabel}
           </p>
         </div>
       </div>

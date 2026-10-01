@@ -19,6 +19,7 @@ from app.models import (
     Warehouse,
 )
 from app.models.enums import RiskCategory, RiskLevel, ShipmentStatus
+from app.tenancy.context import get_tenant
 
 
 def level_for_score(score: float) -> RiskLevel:
@@ -86,12 +87,18 @@ def score_warehouse(w: Warehouse, low_stock_lines: int, total_lines: int) -> tup
 # --------------------------------------------------------------------------- #
 def recompute_all(db: Session, limit_per_category: int = 25) -> int:
     """Recompute risk assessments. Returns number of assessments written."""
-    db.execute(delete(RiskAssessment))
+    org_id = get_tenant().organization_id
+    db.execute(delete(RiskAssessment).where(RiskAssessment.organization_id == org_id))
 
     created: list[RiskAssessment] = []
 
     # ---- Supplier risk ----
-    suppliers = db.scalars(select(Supplier).where(Supplier.is_active.is_(True))).all()
+    suppliers = db.scalars(
+        select(Supplier).where(
+            Supplier.organization_id == org_id,
+            Supplier.is_active.is_(True),
+        )
+    ).all()
     scored_suppliers = []
     for s in suppliers:
         score, factors = score_supplier(s)
@@ -102,6 +109,7 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
             continue
         created.append(
             RiskAssessment(
+                organization_id=org_id,
                 category=RiskCategory.SUPPLIER,
                 level=level_for_score(score),
                 score=score,
@@ -120,7 +128,10 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
     # ---- Shipment risk (focus on non-delivered, high-risk) ----
     shipments = db.scalars(
         select(Shipment)
-        .where(Shipment.status != ShipmentStatus.DELIVERED)
+        .where(
+            Shipment.organization_id == org_id,
+            Shipment.status != ShipmentStatus.DELIVERED,
+        )
         .order_by(Shipment.delay_risk_score.desc())
         .limit(limit_per_category * 4)
     ).all()
@@ -134,6 +145,7 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
             continue
         created.append(
             RiskAssessment(
+                organization_id=org_id,
                 category=RiskCategory.SHIPMENT,
                 level=level_for_score(score),
                 score=score,
@@ -150,18 +162,27 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
         )
 
     # ---- Inventory / warehouse risk ----
-    warehouses = db.scalars(select(Warehouse)).all()
+    warehouses = db.scalars(
+        select(Warehouse).where(Warehouse.organization_id == org_id)
+    ).all()
     low_counts = dict(
         db.execute(
             select(Inventory.warehouse_id, func.count(Inventory.id))
-            .where(Inventory.is_current.is_(True), Inventory.quantity <= Inventory.reorder_point)
+            .where(
+                Inventory.organization_id == org_id,
+                Inventory.is_current.is_(True),
+                Inventory.quantity <= Inventory.reorder_point,
+            )
             .group_by(Inventory.warehouse_id)
         ).all()
     )
     total_counts = dict(
         db.execute(
             select(Inventory.warehouse_id, func.count(Inventory.id))
-            .where(Inventory.is_current.is_(True))
+            .where(
+                Inventory.organization_id == org_id,
+                Inventory.is_current.is_(True),
+            )
             .group_by(Inventory.warehouse_id)
         ).all()
     )
@@ -177,6 +198,7 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
             continue
         created.append(
             RiskAssessment(
+                organization_id=org_id,
                 category=RiskCategory.INVENTORY,
                 level=level_for_score(score),
                 score=score,
@@ -193,20 +215,22 @@ def recompute_all(db: Session, limit_per_category: int = 25) -> int:
         )
 
     # ---- Geographic risk (aggregate by region) ----
-    created.extend(_geographic_risk(db))
+    created.extend(_geographic_risk(db, org_id))
 
     db.add_all(created)
     db.commit()
     return len(created)
 
 
-def _geographic_risk(db: Session) -> list[RiskAssessment]:
+def _geographic_risk(db: Session, org_id) -> list[RiskAssessment]:
     rows = db.execute(
         select(
             Supplier.region,
             func.avg(Supplier.supplier_score),
             func.count(Supplier.id),
-        ).group_by(Supplier.region)
+        )
+        .where(Supplier.organization_id == org_id)
+        .group_by(Supplier.region)
     ).all()
     out = []
     for region, avg_score, count in rows:
@@ -215,6 +239,7 @@ def _geographic_risk(db: Session) -> list[RiskAssessment]:
             continue
         out.append(
             RiskAssessment(
+                organization_id=org_id,
                 category=RiskCategory.GEOGRAPHIC,
                 level=level_for_score(score),
                 score=score,
@@ -236,7 +261,10 @@ def _geographic_risk(db: Session) -> list[RiskAssessment]:
 
 
 def summarize(db: Session) -> dict:
-    assessments = db.scalars(select(RiskAssessment)).all()
+    org_id = get_tenant().organization_id
+    assessments = db.scalars(
+        select(RiskAssessment).where(RiskAssessment.organization_id == org_id)
+    ).all()
     by_category: dict[str, list[float]] = {}
     counts = {lvl.value: 0 for lvl in RiskLevel}
     for a in assessments:

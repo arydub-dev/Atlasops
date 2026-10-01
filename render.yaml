@@ -1,78 +1,114 @@
-# ATLASOPS — Render Blueprint
-# Provisions the full stack: managed Postgres + FastAPI backend + Next.js frontend.
-# Docs: https://render.com/docs/blueprint-spec
-#
-# NOTE: dockerfilePath and dockerContext are relative to the REPOSITORY ROOT
-# (per the Blueprint spec), so we point them at the backend/ and frontend/
-# subdirectories directly. buildFilter scopes rebuilds to each service's folder.
-#
-# After the first deploy, set the two `sync: false` variables in the Render
-# dashboard (see DEPLOYMENT.md):
-#   - atlasops-api  -> CORS_ORIGINS        = your frontend URL(s)
-#   - atlasops-web  -> NEXT_PUBLIC_API_URL = your backend URL  (then redeploy web)
-
+# Staging-first template for the supervised pilot. Not yet deployed/verified.
+# Duplicate into a separate Blueprint/environment for production after gates pass.
+# API/worker receive restricted DATABASE_URL only. Migrate separately first.
+# Upstash REDIS_URL must be a TLS Redis TCP URL, not the REST endpoint.
+# Review paid compute selections before applying; no resources were purchased.
 databases:
-  - name: atlasops-db
-    databaseName: atlasops
-    user: atlasops
-    plan: free
+  - name: atlasops-staging-db
+    databaseName: atlasops_staging
+    user: atlasops_migrations
     region: oregon
+    ipAllowList: []
 
 services:
-  # ------------------------------------------------------------------ #
-  # Backend API — FastAPI (Docker)
-  # ------------------------------------------------------------------ #
   - type: web
-    name: atlasops-api
+    name: atlasops-staging-api
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    plan: free
     region: oregon
-    healthCheckPath: /health
-    autoDeploy: true
-    buildFilter:
-      paths:
-        - backend/**
+    autoDeployTrigger: "off"
+    maxShutdownDelaySeconds: 120
+    healthCheckPath: /health/ready
+    dockerCommand: sh -c 'exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"'
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: atlasops-db
-          property: connectionString
-      - key: JWT_SECRET_KEY
-        generateValue: true
       - key: ENVIRONMENT
-        value: production
-      # Seed the demo dataset + demo login accounts on first boot (only when
-      # the database is empty). Set to "false" after first deploy if desired.
+        value: "staging"
       - key: SEED_ON_STARTUP
+        value: "false"
+      - key: FEATURE_DEMO_SANDBOX
+        value: "false"
+      - key: ALLOW_CREATE_ALL_ON_STARTUP
+        value: "false"
+      - key: CONNECTOR_SYNC_INLINE
+        value: "false"
+      - key: FEATURE_BILLING_ENFORCE
         value: "true"
-      # Comma-separated list of allowed browser origins (your frontend URL).
-      # e.g. https://atlasops.online,https://www.atlasops.online
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: WORKOS_API_KEY
+        sync: false
+      - key: WORKOS_CLIENT_ID
+        sync: false
+      - key: WORKOS_COOKIE_PASSWORD
+        sync: false
+      - key: WORKOS_REDIRECT_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
       - key: CORS_ORIGINS
         sync: false
-      # Optional: enables OpenAI-backed Copilot. Without it, the built-in
-      # deterministic local advisor is used.
-      - key: OPENAI_API_KEY
+      - key: METRICS_TOKEN
         sync: false
-
-  # ------------------------------------------------------------------ #
-  # Frontend — Next.js (Docker, standalone output)
-  # ------------------------------------------------------------------ #
-  - type: web
-    name: atlasops-web
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_STARTER_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_PROFESSIONAL_MONTHLY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: CSRF_ORIGIN_CHECK
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: ENABLE_API_DOCS
+        value: "false"
+      - key: LEAD_CAPTURE_ENABLED
+        value: "false"
+  - type: worker
+    name: atlasops-staging-worker
     runtime: docker
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     region: oregon
-    autoDeploy: true
-    buildFilter:
-      paths:
-        - frontend/**
+    autoDeployTrigger: "off"
+    maxShutdownDelaySeconds: 120
+    dockerCommand: arq app.worker.WorkerSettings
     envVars:
-      # IMPORTANT: NEXT_PUBLIC_* is baked in at BUILD time. Set this to the
-      # backend's public URL, then trigger a redeploy of this service.
-      # e.g. https://api.atlasops.online  (or the atlasops-api .onrender.com URL)
-      - key: NEXT_PUBLIC_API_URL
+      - key: ENVIRONMENT
+        value: "staging"
+      - key: SEED_ON_STARTUP
+        value: "false"
+      - key: FEATURE_DEMO_SANDBOX
+        value: "false"
+      - key: ALLOW_CREATE_ALL_ON_STARTUP
+        value: "false"
+      - key: CONNECTOR_SYNC_INLINE
+        value: "false"
+      - key: FEATURE_BILLING_ENFORCE
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: SENTRY_DSN
         sync: false

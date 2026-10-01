@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Generic, TypeVar
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,7 +37,7 @@ class Page(BaseModel, Generic[T]):
 class SupplierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     name: str
     country: str
     region: str
@@ -63,7 +64,7 @@ class SupplierScorecard(SupplierOut):
 class WarehouseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     name: str
     location: str
     region: str
@@ -78,9 +79,9 @@ class WarehouseOut(BaseModel):
 class InventoryItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    warehouse_id: int
-    product_id: int
+    id: UUID
+    warehouse_id: UUID
+    product_id: UUID
     quantity: int
     reorder_point: int
     safety_stock: int
@@ -89,10 +90,10 @@ class InventoryItemOut(BaseModel):
 
 
 class InventoryEnriched(BaseModel):
-    id: int
-    warehouse_id: int
+    id: UUID
+    warehouse_id: UUID
     warehouse_name: str
-    product_id: int
+    product_id: UUID
     product_sku: str
     product_name: str
     quantity: int
@@ -111,7 +112,7 @@ class InventoryEnriched(BaseModel):
 class ShipmentEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     status: ShipmentStatus
     location: str
     note: str | None
@@ -121,7 +122,7 @@ class ShipmentEventOut(BaseModel):
 class ShipmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     reference: str
     origin: str
     destination: str
@@ -135,9 +136,9 @@ class ShipmentOut(BaseModel):
     eta: datetime
     delivered_at: datetime | None
     delay_days: float
-    supplier_id: int | None
-    warehouse_id: int | None
-    product_id: int | None
+    supplier_id: UUID | None
+    warehouse_id: UUID | None
+    product_id: UUID | None
 
 
 class ShipmentDetail(ShipmentOut):
@@ -158,14 +159,14 @@ class ShipmentStatusUpdate(BaseModel):
 class AlertOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     alert_type: AlertType
     priority: AlertPriority
     status: AlertStatus
     title: str
     message: str
     entity_type: str | None
-    entity_id: int | None
+    entity_id: UUID | None
     resolved_at: datetime | None
     resolution_note: str | None
     created_at: datetime
@@ -182,7 +183,7 @@ class AlertUpdate(BaseModel):
 class RiskAssessmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     category: RiskCategory
     level: RiskLevel
     score: float
@@ -190,7 +191,7 @@ class RiskAssessmentOut(BaseModel):
     description: str
     recommendation: str
     entity_type: str | None
-    entity_id: int | None
+    entity_id: UUID | None
     factors: dict[str, Any] | None
     created_at: datetime
 
@@ -209,10 +210,10 @@ class RiskSummary(BaseModel):
 class SimulationRequest(BaseModel):
     name: str | None = None
     simulation_type: SimulationType
-    # generic parameters; meaning depends on simulation_type
-    supplier_id: int | None = None
-    warehouse_id: int | None = None
+    supplier_id: UUID | None = None
+    warehouse_id: UUID | None = None
     region: str | None = None
+    carrier: str | None = None
     severity: float = Field(default=0.7, ge=0.0, le=1.0)
     duration_days: int = Field(default=14, ge=1, le=180)
     demand_multiplier: float = Field(default=1.5, ge=1.0, le=5.0)
@@ -221,7 +222,7 @@ class SimulationRequest(BaseModel):
 class SimulationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     name: str
     simulation_type: SimulationType
     parameters: dict[str, Any]
@@ -243,7 +244,7 @@ class AIChatRequest(BaseModel):
 class AIReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     prompt: str
     response: str
     report_type: str

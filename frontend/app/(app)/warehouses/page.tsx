@@ -7,7 +7,7 @@ import type { Warehouse } from "@/lib/types";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { CardGridSkeleton, EmptyState, ErrorState } from "@/components/shared/states";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import {

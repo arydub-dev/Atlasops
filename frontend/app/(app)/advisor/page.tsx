@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Sparkles, User as UserIcon } from "lucide-react";
 import { api } from "@/lib/api";
-import type { AIReport } from "@/lib/types";
+import type { AIOrchestrateResponse } from "@/lib/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Markdown } from "@/components/shared/markdown";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,10 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   model?: string;
+  intent?: string;
+  tool?: string;
+  confidence?: number | null;
+  citations?: { type?: string; id?: string; source?: string }[];
 }
 
 export default function AdvisorPage() {
@@ -43,8 +47,22 @@ export default function AdvisorPage() {
     setInput("");
     setLoading(true);
     try {
-      const res = await api.post<AIReport>("/ai/chat", { prompt });
-      setMessages((m) => [...m, { role: "assistant", content: res.response, model: res.model }]);
+      const res = await api.post<AIOrchestrateResponse>("/ai/orchestrate", {
+        prompt,
+        report_type: "orchestrate",
+      });
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: res.response,
+          model: res.model,
+          intent: res.intent,
+          tool: res.tool,
+          confidence: res.confidence,
+          citations: res.citations,
+        },
+      ]);
     } catch (e) {
       setMessages((m) => [
         ...m,
@@ -59,7 +77,7 @@ export default function AdvisorPage() {
     <div className="flex h-[calc(100vh-7rem)] flex-col space-y-4">
       <PageHeader
         title="Operations Copilot"
-        description="Your supply chain operations analyst — every answer is grounded in live network data."
+        description="Graph-grounded orchestration — intent detection, retrieval, risk, and cited responses."
       >
         <Badge variant={provider === "openai" ? "success" : "secondary"} className="gap-1.5">
           <Sparkles className="h-3 w-3" />
@@ -76,18 +94,9 @@ export default function AdvisorPage() {
               </div>
               <p className="mt-4 text-sm font-medium">What operational question can I analyze?</p>
               <p className="mt-1 max-w-md text-xs text-muted-foreground">
-                I explain delays, inventory risks and supplier issues, recommend actions, and
-                summarize trends — citing the live data behind every conclusion.
+                Mission summaries, root-cause, impact, supplier and inventory analysis — every answer
+                cites graph entities and live risk context.
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-                {["Explain delays", "Inventory risks", "Supplier issues", "Recommend actions", "Summarize trends"].map(
-                  (c) => (
-                    <span key={c} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                      {c}
-                    </span>
-                  )
-                )}
-              </div>
               <div className="mt-5 flex max-w-xl flex-wrap justify-center gap-2">
                 {suggestions.map((s) => (
                   <button
@@ -117,7 +126,43 @@ export default function AdvisorPage() {
                 }`}
               >
                 {m.role === "assistant" ? (
-                  <Markdown content={m.content} />
+                  <>
+                    {(m.tool || m.confidence != null) && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {m.tool && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {m.tool}
+                          </Badge>
+                        )}
+                        {m.intent && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {m.intent}
+                          </Badge>
+                        )}
+                        {m.confidence != null && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {(m.confidence * 100).toFixed(0)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    <Markdown content={m.content} />
+                    {m.citations && m.citations.length > 0 && (
+                      <div className="mt-3 border-t border-border/60 pt-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Citations
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {m.citations.slice(0, 8).map((c, ci) => (
+                            <Badge key={ci} variant="secondary" className="text-[10px]">
+                              {c.type}
+                              {c.id ? `:${String(c.id).slice(0, 24)}` : ""}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="text-sm">{m.content}</p>
                 )}
@@ -159,7 +204,7 @@ export default function AdvisorPage() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask the Operations Copilot…"
+              placeholder="Ask about delays, impact, suppliers, inventory…"
               disabled={loading}
             />
             <Button type="submit" disabled={loading || !input.trim()}>

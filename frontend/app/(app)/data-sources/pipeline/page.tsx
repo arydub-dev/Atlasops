@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Activity, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, XCircle } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 import type { ImportJob } from "@/lib/types";
 import { formatNumber, relativeTime } from "@/lib/format";

@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Database, Loader2, LogOut, Menu, Plug, Sparkles, User as UserIcon } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronsUpDown,
+  Database,
+  Loader2,
+  LogOut,
+  Menu,
+  Plug,
+  Sparkles,
+  User as UserIcon,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useDemoMode } from "@/lib/demo-mode";
 import { api } from "@/lib/api";
-import { ROLE_LABELS } from "@/lib/constants";
+import { roleLabel } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +29,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { GlobalSearch } from "@/components/layout/global-search";
+
+const DEMO_SANDBOX = process.env.NEXT_PUBLIC_DEMO_SANDBOX === "true";
 
 function DatasetBadge() {
   const [mode, setMode] = useState<"demo" | "connected" | null>(null);
@@ -44,6 +57,7 @@ function DatasetBadge() {
 
 function DemoToggle() {
   const { enabled, seeding, toggle } = useDemoMode();
+  if (!DEMO_SANDBOX) return null;
   return (
     <button
       onClick={toggle}
@@ -71,8 +85,64 @@ function DemoToggle() {
   );
 }
 
+function OrgSwitcher() {
+  const { memberships, currentOrganization, switchOrg } = useAuth();
+  const [switching, setSwitching] = useState(false);
+
+  if (memberships.length <= 1) {
+    if (!currentOrganization) return null;
+    return (
+      <span className="hidden max-w-[160px] truncate rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground sm:inline-block">
+        {currentOrganization.name}
+      </span>
+    );
+  }
+
+  async function onSwitch(orgId: string) {
+    if (orgId === currentOrganization?.id) return;
+    setSwitching(true);
+    try {
+      await switchOrg(orgId);
+      window.location.reload();
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="hidden items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent sm:flex">
+          {switching ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Building2 className="h-3.5 w-3.5" />
+          )}
+          <span className="max-w-[120px] truncate">{currentOrganization?.name ?? "Organization"}</span>
+          <ChevronsUpDown className="h-3 w-3 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[200px]">
+        <DropdownMenuLabel>Switch organization</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {memberships.map((m) => {
+          const active = m.organization_id === currentOrganization?.id;
+          return (
+            <DropdownMenuItem key={m.id} onClick={() => onSwitch(m.organization_id)}>
+              <span className="flex flex-1 items-center justify-between gap-2">
+                <span className="truncate">{m.organization_name ?? m.organization_id}</span>
+                {active && <Check className="h-3.5 w-3.5 text-primary" />}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function Topbar({ onMenu }: { onMenu?: () => void }) {
-  const { user, logout } = useAuth();
+  const { user, currentMembership, logout } = useAuth();
   const initials = user?.full_name
     ? user.full_name
         .split(" ")
@@ -80,6 +150,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
         .slice(0, 2)
         .join("")
     : "??";
+  const role = roleLabel(currentMembership?.role_slug);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:px-6">
@@ -90,6 +161,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
         <GlobalSearch />
       </div>
       <div className="flex items-center gap-1.5">
+        <OrgSwitcher />
         <DatasetBadge />
         <DemoToggle />
         <ThemeToggle />
@@ -101,9 +173,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
               </span>
               <span className="hidden text-left leading-tight sm:block">
                 <span className="block text-sm font-medium">{user?.full_name}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {user ? ROLE_LABELS[user.role] : ""}
-                </span>
+                <span className="block text-xs text-muted-foreground">{role}</span>
               </span>
             </button>
           </DropdownMenuTrigger>
@@ -117,10 +187,10 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>
               <UserIcon className="mr-1 h-4 w-4" />
-              {user ? ROLE_LABELS[user.role] : ""}
+              {role}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem onClick={() => void logout()} className="text-destructive focus:text-destructive">
               <LogOut className="mr-1 h-4 w-4" />
               Sign out
             </DropdownMenuItem>

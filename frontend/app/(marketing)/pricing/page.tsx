@@ -14,20 +14,20 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "ATLASOPS pricing: start free with a fully populated demo workspace, scale with Professional, or deploy across the organization with Enterprise.",
+    "ATLASOPS plans for a focused operational pilot, growing teams, and enterprise requirements. Final pricing is agreed before purchase.",
 };
 
 const TIERS = [
   {
-    name: "Demo",
-    price: "Free",
+    name: "Starter",
+    price: "Pilot quote",
     cadence: "",
-    desc: "A fully populated workspace to explore the entire platform.",
-    cta: "Start Free Demo",
-    href: "/get-started",
+    desc: "For small teams validating shipment, inventory and supplier visibility.",
+    cta: "Discuss a pilot",
+    href: "/contact",
     featured: false,
     features: [
-      "Pre-seeded suppliers, warehouses & shipments",
+      "10 users and up to 3 connectors",
       "Mission Control & all modules",
       "Operations Copilot",
       "Risk intelligence & simulation",
@@ -40,13 +40,13 @@ const TIERS = [
     cadence: "/ per workspace",
     desc: "For teams running real operations on connected data.",
     cta: "Book a Demo",
-    href: "/get-started",
+    href: "/contact",
     featured: true,
     features: [
-      "Everything in Demo",
+      "50 users and up to 15 connectors",
       "Connect your own data sources",
       "Self-serve CSV & Excel ingestion",
-      "Connect ERP, CRM, WMS, TMS & REST APIs",
+      "Salesforce, Dynamics BC and UPS connectors (beta)",
       "Pipeline monitoring & data lineage",
       "Role-based access control",
     ],
@@ -57,14 +57,14 @@ const TIERS = [
     cadence: "/ per organization",
     desc: "For organizations standardizing operations across business units.",
     cta: "Contact Sales",
-    href: "/get-started",
+    href: "/contact",
     featured: false,
     features: [
       "Everything in Professional",
-      "Multi-tenant deployment",
+      "Multi-tenant orgs with PostgreSQL RLS (Available)",
       "Audit logging & advanced governance",
-      "SSO-ready authentication architecture",
-      "Custom integration support",
+      "Enterprise SSO (email-first, Available)",
+      "Dynamics BC, Salesforce & UPS connectors (Beta)",
       "Deployment & onboarding assistance",
     ],
   },
@@ -73,19 +73,19 @@ const TIERS = [
 const FAQ = [
   {
     q: "Can I try ATLASOPS without connecting any systems?",
-    a: "Yes. The demo workspace provisions a complete, realistic dataset so you can explore every module immediately — no integration required.",
+    a: "A guided demonstration uses clearly synthetic data. Production organizations begin with their own data; a demo does not prove your integration works.",
   },
   {
     q: "What data sources can I connect?",
-    a: "Import from CSV and Excel yourself, or connect enterprise systems — SAP, Oracle, Salesforce, Microsoft Dynamics, your WMS/TMS and any REST API. CSV and Excel are self-serve; our team helps you connect enterprise systems during onboarding.",
+    a: "CSV and Excel import are self-serve. Dynamics 365 Business Central, Salesforce, and UPS Tracking are available in Beta. Additional ERPs (SAP, Oracle, etc.) are Coming Soon.",
   },
   {
     q: "How is access controlled?",
-    a: "Authentication uses JWTs over an OAuth2 flow, and role-based access control enforces permissions per endpoint following least privilege.",
+    a: "Authentication is email-first enterprise SSO: enter your work email and ATLASOPS routes you to your organization's identity provider. Sessions use httpOnly cookies. Role-based permissions enforce least privilege per endpoint.",
   },
   {
     q: "How is ATLASOPS deployed?",
-    a: "The platform is cloud-native and containerized with Docker, configured through environment variables, and designed for multi-tenant deployment.",
+    a: "The platform is cloud-native and containerized with Docker, configured through environment variables, with shared PostgreSQL and row-level security for tenant isolation.",
   },
 ];
 
@@ -94,8 +94,8 @@ export default function PricingPage() {
     <>
       <PageHero
         eyebrow="Pricing"
-        title="Start free. Scale when you're ready."
-        description="Explore the full platform in a demo workspace at no cost, then move to connected data and organization-wide deployment when it's time."
+        title="Start with a focused pilot."
+        description="Agree on a scope, data source and success criteria before expanding. Pricing and service commitments are confirmed in your quote."
       />
 
       <Section>

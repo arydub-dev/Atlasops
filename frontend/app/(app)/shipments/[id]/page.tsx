@@ -4,10 +4,11 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, PackageCheck, Save } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { canOperateRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { ShipmentDetail, ShipmentStatus } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, titleCase } from "@/lib/format";
+import { roleLabel } from "@/lib/constants";
 import { PageHeader } from "@/components/shared/page-header";
 import { ShipmentStatusBadge } from "@/components/shared/badges";
 import { ErrorState, LoadingState } from "@/components/shared/states";
@@ -27,7 +28,7 @@ const STATUS_OPTIONS: ShipmentStatus[] = [
 
 export default function ShipmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { user } = useAuth();
+  const { currentMembership } = useAuth();
   const { data, loading, error, refetch } = useFetch<ShipmentDetail>(`/shipments/${id}`);
   const [newStatus, setNewStatus] = useState<ShipmentStatus | "">("");
   const [location, setLocation] = useState("");
@@ -35,7 +36,7 @@ export default function ShipmentDetailPage({ params }: { params: Promise<{ id: s
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const canUpdate = user?.role === "admin" || user?.role === "operations_manager";
+  const canUpdate = canOperateRole(currentMembership?.role_slug);
 
   async function save() {
     if (!newStatus) return;
@@ -145,8 +146,8 @@ export default function ShipmentDetailPage({ params }: { params: Promise<{ id: s
             <CardContent className="space-y-4">
               {!canUpdate && (
                 <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  Your role ({user ? titleCase(user.role) : ""}) has read-only access. Operations
-                  Managers can update shipment status.
+                  Your role ({roleLabel(currentMembership?.role_slug) || "unknown"}) has read-only
+                  access. Operations Managers can update shipment status.
                 </p>
               )}
               <div className="space-y-1.5">

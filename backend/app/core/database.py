@@ -38,7 +38,7 @@ DATABASE_URL = _normalize_db_url(settings.DATABASE_URL)
 _on_serverless = bool(os.environ.get("VERCEL"))
 
 _is_sqlite = DATABASE_URL.startswith("sqlite")
-_engine_kwargs: dict = {"pool_pre_ping": True, "future": True}
+_engine_kwargs: dict = {"pool_pre_ping": True, "future": True, "hide_parameters": True}
 if _is_sqlite:
     # SQLite (used for tests/smoke checks) doesn't accept server-style pool sizing.
     _engine_kwargs["connect_args"] = {"check_same_thread": False}

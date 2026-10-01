@@ -17,28 +17,49 @@ from app.services import ingestion, metrics, risk_engine
 
 
 def build_context(db: Session) -> dict:
-    kpis = metrics.compute_kpis(db)
-    risk = risk_engine.summarize(db)
+    """Build AI context scoped to the caller's RBAC permissions.
 
-    worst_suppliers = db.scalars(
-        select(Supplier).order_by(Supplier.supplier_score.asc()).limit(5)
-    ).all()
-    busiest_warehouses = db.scalars(
-        select(Warehouse).order_by((Warehouse.current_inventory * 1.0 / Warehouse.capacity).desc()).limit(5)
-    ).all()
-    open_alerts = db.scalars(
-        select(Alert).where(Alert.status != AlertStatus.RESOLVED).order_by(Alert.created_at.desc()).limit(8)
-    ).all()
+    ``ai.chat`` alone must not become a privilege-escalation path into
+    suppliers/risk/analytics data the role cannot read via dedicated APIs.
+    """
+    from app.tenancy.context import get_tenant
 
-    return {
-        "kpis": kpis,
-        "risk": {
+    tenant = get_tenant()
+    org_id = tenant.organization_id
+    perms = tenant.permissions
+    ctx: dict = {"permissions_applied": sorted(perms)}
+
+    if "analytics.read" in perms or "mission.read" in perms:
+        ctx["kpis"] = metrics.compute_kpis(db, org_id)
+
+    if "risk.read" in perms:
+        risk = risk_engine.summarize(db)
+        ctx["risk"] = {
             "overall_score": risk["overall_score"],
-            "overall_level": risk["overall_level"].value if isinstance(risk["overall_level"], RiskLevel) else risk["overall_level"],
+            "overall_level": risk["overall_level"].value
+            if isinstance(risk["overall_level"], RiskLevel)
+            else risk["overall_level"],
             "by_category": risk["by_category"],
             "counts": risk["counts"],
-        },
-        "worst_suppliers": [
+        }
+        ctx["top_risks"] = [
+            {
+                "title": r.title,
+                "score": r.score,
+                "level": r.level.value,
+                "recommendation": r.recommendation,
+            }
+            for r in risk["top_risks"][:5]
+        ]
+
+    if "suppliers.read" in perms:
+        worst_suppliers = db.scalars(
+            select(Supplier)
+            .where(Supplier.organization_id == org_id)
+            .order_by(Supplier.supplier_score.asc())
+            .limit(5)
+        ).all()
+        ctx["worst_suppliers"] = [
             {
                 "name": s.name,
                 "score": round(s.supplier_score, 1),
@@ -46,69 +67,111 @@ def build_context(db: Session) -> dict:
                 "avg_delay_days": round(s.average_delay_days, 1),
             }
             for s in worst_suppliers
-        ],
-        "high_utilization_warehouses": [
+        ]
+
+    if "warehouses.read" in perms:
+        busiest_warehouses = db.scalars(
+            select(Warehouse)
+            .where(Warehouse.organization_id == org_id)
+            .order_by((Warehouse.current_inventory * 1.0 / Warehouse.capacity).desc())
+            .limit(5)
+        ).all()
+        ctx["high_utilization_warehouses"] = [
             {"name": w.name, "utilization": w.utilization, "risk_level": w.risk_level.value}
             for w in busiest_warehouses
-        ],
-        "open_alerts": [
+        ]
+
+    if "alerts.read" in perms:
+        open_alerts = db.scalars(
+            select(Alert)
+            .where(
+                Alert.organization_id == org_id,
+                Alert.status != AlertStatus.RESOLVED,
+            )
+            .order_by(Alert.created_at.desc())
+            .limit(8)
+        ).all()
+        ctx["open_alerts"] = [
             {"title": a.title, "priority": a.priority.value, "type": a.alert_type.value}
             for a in open_alerts
-        ],
-        "top_risks": [
-            {"title": r.title, "score": r.score, "level": r.level.value, "recommendation": r.recommendation}
-            for r in risk["top_risks"][:5]
-        ],
-        "data_sources": _safe_data_context(db),
-    }
+        ]
+
+    if "connectors.read" in perms:
+        ctx["data_sources"] = _safe_data_context(db)
+
+    return ctx
 
 
 def _safe_data_context(db: Session) -> dict:
     try:
-        return ingestion.ai_context(db)
+        with db.begin_nested():
+            return ingestion.ai_context(db)
     except Exception:
-        return {"mode": "demo", "connected_systems": 0, "sources": [], "failures": []}
+        return {"mode": "unknown", "data_available": False, "sources": [], "failures": ["Data source context unavailable"]}
 
 
-def answer(db: Session, prompt: str) -> tuple[str, str, dict]:
+def answer(db: Session, prompt: str, *, context: dict | None = None) -> tuple[str, str, dict]:
     """Return (response_text, model_name, context_snapshot)."""
-    context = build_context(db)
-    if settings.ai_enabled:
-        try:
-            text = _answer_with_openai(prompt, context)
-            return text, settings.OPENAI_MODEL, context
-        except Exception as exc:  # graceful degradation
-            text = _answer_locally(prompt, context)
-            return (
-                f"{text}\n\n_(AI provider unavailable: {type(exc).__name__}; used local engine.)_",
-                "local-engine",
-                context,
-            )
-    return _answer_locally(prompt, context), "local-engine", context
+    from app.services.ai_providers import get_ai_provider
+
+    context = build_context(db) if context is None else context
+    # Simulation intents: never invent outcomes — point at the simulation engine.
+    if _wants_simulation(prompt):
+        text = _simulation_guidance(prompt, context)
+        return text, "local-engine", context
+
+    provider = get_ai_provider()
+    from app.core.telemetry import AI_PROVIDER_TOTAL
+    provider_label = "openai" if provider.name == "openai" else "local-engine"
+    try:
+        text = provider.answer(prompt, context)
+        if AI_PROVIDER_TOTAL is not None:
+            AI_PROVIDER_TOTAL.labels(provider_label, "success").inc()
+        model = settings.OPENAI_MODEL if provider.name == "openai" else provider.name
+        return text, model, context
+    except Exception as exc:  # graceful degradation
+        if AI_PROVIDER_TOTAL is not None:
+            AI_PROVIDER_TOTAL.labels(provider_label, "fallback").inc()
+        from app.services.ai_providers import LocalEngineProvider
+
+        text = LocalEngineProvider().answer(prompt, context)
+        return (
+            f"{text}\n\n_(AI provider unavailable: {type(exc).__name__}; used local engine.)_",
+            "local-engine",
+            context,
+        )
 
 
-def _answer_with_openai(prompt: str, context: dict) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    system = (
-        "You are the Operations Copilot for ATLASOPS, an enterprise supply chain operational intelligence platform. "
-        "Answer concisely and decisively for an operations leadership audience. "
-        "Always ground answers in the provided JSON context. Use short paragraphs and bullet "
-        "points. When recommending actions, be specific and prioritized."
+def _wants_simulation(prompt: str) -> bool:
+    p = prompt.lower()
+    return any(
+        k in p
+        for k in (
+            "what happens if",
+            "what if",
+            "simulate",
+            "simulation",
+            "unavailable for",
+            "shutdown for",
+            "outage for",
+            "closed for",
+        )
     )
-    completion = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        temperature=0.3,
-        messages=[
-            {"role": "system", "content": system},
-            {
-                "role": "user",
-                "content": f"Operational context (JSON):\n{context}\n\nQuestion: {prompt}",
-            },
-        ],
+
+
+def _simulation_guidance(prompt: str, context: dict) -> str:
+    worst = (context.get("worst_suppliers") or [{}])[0]
+    name = worst.get("name") or "the selected supplier"
+    return (
+        "## Simulation required\n\n"
+        f"I will not invent impact numbers for: _{prompt.strip()}_\n\n"
+        "Run the **Simulation Center** with a grounded scenario against live tenant data:\n"
+        f"1. Open `/simulator` and choose **Supplier delay** or **Supplier shutdown**.\n"
+        f"2. Target **{name}** (or another supplier from your scorecards).\n"
+        "3. Compare **no action** vs recommended mitigations in the result.\n"
+        "4. Record the chosen action in Incidents / Alerts when you decide.\n\n"
+        "_Estimates from the simulation engine are labeled modeled estimates, not audited financials._"
     )
-    return completion.choices[0].message.content or ""
 
 
 # --------------------------------------------------------------------------- #
@@ -116,8 +179,14 @@ def _answer_with_openai(prompt: str, context: dict) -> str:
 # --------------------------------------------------------------------------- #
 def _answer_locally(prompt: str, context: dict) -> str:
     p = prompt.lower()
-    kpis = context["kpis"]
-    risk = context["risk"]
+    kpis = context.get("kpis") or {}
+    risk = context.get("risk") or {"overall_score": 0, "overall_level": "unknown", "by_category": {}, "counts": {}}
+    if not context.get("kpis") and not context.get("risk"):
+        return (
+            "I can answer within your role permissions, but this account does not have "
+            "access to the operational datasets needed for that question. Ask an admin "
+            "to grant the relevant read permissions, or narrow the question to areas you can access."
+        )
 
     if any(
         k in p
@@ -146,24 +215,28 @@ def _answer_locally(prompt: str, context: dict) -> str:
 
 
 def _executive_summary(context: dict) -> str:
-    k = context["kpis"]
-    r = context["risk"]
+    k = context.get("kpis") or {}
+    r = context.get("risk") or {"overall_score": 0, "overall_level": "unknown", "counts": {}}
+    if not k and not r:
+        return "Insufficient permissions to build an executive summary for this role."
     lines = [
         "## Operational Status Summary",
         "",
-        f"- **Shipments:** {k['total_shipments']:,} total, {k['active_shipments']:,} active, "
-        f"{k['delayed_shipments']:,} delayed.",
-        f"- **On-time delivery:** {k['on_time_delivery_rate']}%.",
-        f"- **Inventory health:** {k['inventory_health_score']}% of lines healthy.",
-        f"- **Supplier reliability:** {k['supplier_reliability_score']}/100.",
-        f"- **Overall risk:** {r['overall_score']}/100 ({r['overall_level']}). "
-        f"Critical risks: {r['counts'].get('critical', 0)}.",
-        f"- **Open alerts:** {k['open_alerts']:,}.",
+        f"- **Shipments:** {k.get('total_shipments', 0):,} total, {k.get('active_shipments', 0):,} active, "
+        f"{k.get('delayed_shipments', 0):,} delayed.",
+        f"- **On-time delivery:** {k.get('on_time_delivery_rate', '—')}%.",
+        f"- **Inventory health:** {k.get('inventory_health_score', '—')}% of lines healthy.",
+        f"- **Supplier reliability:** {k.get('supplier_reliability_score', '—')}/100.",
+        f"- **Overall risk:** {r.get('overall_score', '—')}/100 ({r.get('overall_level', '—')}). "
+        f"Critical risks: {(r.get('counts') or {}).get('critical', 0)}.",
+        f"- **Open alerts:** {k.get('open_alerts', 0):,}.",
         "",
         "### Top risks",
     ]
-    for risk in context["top_risks"]:
+    for risk in context.get("top_risks") or []:
         lines.append(f"- **{risk['title']}** ({risk['level']}, {risk['score']}): {risk['recommendation']}")
+    if not context.get("top_risks"):
+        lines.append("- _No risk records in scope for this role._")
     return "\n".join(lines)
 
 
@@ -199,13 +272,15 @@ def _data_sources_answer(context: dict) -> str:
 
 
 def _delay_answer(context: dict) -> str:
-    k = context["kpis"]
-    worst = context["worst_suppliers"]
+    k = context.get("kpis") or {}
+    worst = context.get("worst_suppliers") or []
+    if not k and not worst:
+        return "Delay analysis requires analytics and/or supplier read permissions."
     lines = [
         "## Why delays are trending",
         "",
-        f"There are currently **{k['delayed_shipments']:,} delayed shipments** against an on-time "
-        f"rate of **{k['on_time_delivery_rate']}%**. The primary contributors are supplier reliability "
+        f"There are currently **{k.get('delayed_shipments', 0):,} delayed shipments** against an on-time "
+        f"rate of **{k.get('on_time_delivery_rate', '—')}%**. The primary contributors are supplier reliability "
         "gaps and concentration risk:",
         "",
     ]
@@ -224,14 +299,15 @@ def _delay_answer(context: dict) -> str:
 
 
 def _inventory_answer(context: dict) -> str:
-    whs = context["high_utilization_warehouses"]
+    whs = context.get("high_utilization_warehouses") or []
+    if not whs:
+        return "Warehouse risk analysis requires warehouses.read permission."
     lines = ["## Inventory & warehouse risk", ""]
-    if whs:
-        top = whs[0]
-        lines.append(
-            f"The most at-risk warehouse is **{top['name']}** at **{top['utilization']}% utilization** "
-            f"(risk level: {top['risk_level']})."
-        )
+    top = whs[0]
+    lines.append(
+        f"The most at-risk warehouse is **{top['name']}** at **{top['utilization']}% utilization** "
+        f"(risk level: {top['risk_level']})."
+    )
     lines += ["", "**Watchlist:**"]
     for w in whs[:5]:
         lines.append(f"- {w['name']}: {w['utilization']}% utilization ({w['risk_level']}).")
@@ -246,9 +322,17 @@ def _inventory_answer(context: dict) -> str:
 
 
 def _supplier_answer(context: dict) -> str:
-    worst = context["worst_suppliers"]
-    lines = ["## Supplier performance", "", f"Average supplier reliability score is "
-             f"**{context['kpis']['supplier_reliability_score']}/100**.", "", "**Lowest performers:**"]
+    worst = context.get("worst_suppliers") or []
+    k = context.get("kpis") or {}
+    if not worst and "supplier_reliability_score" not in k:
+        return "Supplier analysis requires suppliers.read (and preferably analytics.read)."
+    lines = [
+        "## Supplier performance",
+        "",
+        f"Average supplier reliability score is **{k.get('supplier_reliability_score', '—')}/100**.",
+        "",
+        "**Lowest performers:**",
+    ]
     for s in worst:
         lines.append(
             f"- **{s['name']}** — score {s['score']}, reliability {s['reliability']}%, "
@@ -265,7 +349,9 @@ def _supplier_answer(context: dict) -> str:
 
 
 def _risk_answer(context: dict) -> str:
-    r = context["risk"]
+    r = context.get("risk")
+    if not r:
+        return "Risk analysis requires risk.read permission."
     lines = [
         "## Risk exposure",
         "",
@@ -273,23 +359,24 @@ def _risk_answer(context: dict) -> str:
         "",
         "**By category:**",
     ]
-    for cat, score in r["by_category"].items():
+    for cat, score in (r.get("by_category") or {}).items():
         lines.append(f"- {cat.title()}: {score}/100")
     lines += ["", "**Highest individual risks:**"]
-    for risk in context["top_risks"]:
+    for risk in context.get("top_risks") or []:
         lines.append(f"- {risk['title']} ({risk['level']}, {risk['score']})")
     return "\n".join(lines)
 
 
 def _action_answer(context: dict) -> str:
+    top = context.get("top_risks") or []
     lines = [
         "## Recommended leadership actions",
         "",
         "Prioritized by operational and financial impact:",
         "",
     ]
-    for i, risk in enumerate(context["top_risks"][:5], start=1):
+    for i, risk in enumerate(top[:5], start=1):
         lines.append(f"{i}. **{risk['title']}** — {risk['recommendation']}")
-    if not context["top_risks"]:
-        lines.append("1. Maintain current operating posture; no critical risks detected.")
+    if not top:
+        lines.append("1. Maintain current operating posture; no critical risks in your permission scope.")
     return "\n".join(lines)

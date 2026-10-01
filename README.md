@@ -1,3 +1,7 @@
+> Latest supervised-pilot status: [September 30 readiness report](docs/PILOT_READINESS_2026-09-30.md). Deployment target: Vercel + Render + Upstash; hosted gates remain blocked pending repository/provisioning.
+
+> Current release status: see [the launch report](docs/LAUNCH_REPORT.md) and [local validation evidence](docs/reports/2026-09-29-release-checks.md). Hosted commercial launch remains unverified; historical readiness claims are not current approval.
+
 # ATLASOPS
 
 **Operational intelligence for modern supply chains.** ATLASOPS unifies operational
@@ -121,27 +125,34 @@ flowchart TB
 
     subgraph Backend["FastAPI application"]
         API["REST API /api/v1/*"]
-        AUTH["JWT auth + RBAC"]
+        AUTH["WorkOS sessions + RBAC + API tokens"]
+        BILL["Stripe billing"]
+        CONN["Connector SDK"]
         subgraph Services["Domain services"]
             MET["Metrics / Analytics"]
             RISK["Risk Engine"]
             ALERT["Alert Engine"]
             SIM["Simulation Engine"]
-            ING["Ingestion Service"]
+            ING["CSV/Excel ingestion"]
             AI["Operations Copilot"]
         end
     end
 
-    DB[("PostgreSQL")]
+    DB[("PostgreSQL + RLS")]
+    REDIS[("Redis + ARQ worker")]
     OPENAI["OpenAI API (optional)"]
-    EXT["External systems<br/>ERP · WMS · TMS · CRM · CSV · Excel"]
+    EXT["Salesforce · Dynamics BC · UPS · CSV/Excel"]
 
-    UI -->|HTTPS JSON + Bearer JWT| API
+    UI -->|HTTPS JSON + httpOnly session cookie| API
     API --> AUTH
+    API --> BILL
+    API --> CONN
     API --> Services
     Services --> DB
     AUTH --> DB
-    EXT -->|files / API| ING
+    CONN --> REDIS
+    EXT -->|OAuth / APIs / files| CONN
+    EXT -->|files| ING
     AI -.->|when key set| OPENAI
 ```
 
@@ -254,9 +265,12 @@ get-started workspace chooser, kept fully distinct from the authenticated applic
 | Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS, Recharts | Server/client boundaries, type-safe API integration, maintainable styling, production builds |
 | Backend | FastAPI, Python 3.12, SQLAlchemy 2.0, Pydantic v2 | Auto-generated OpenAPI, request validation, a testable plain-Python service layer |
 | Database | PostgreSQL 16 (SQLite for local evaluation) | Relational model + JSON columns + concurrent access; SQLite removes infra for local dev |
-| Auth | JWT (OAuth2 password flow), bcrypt, RBAC | Stateless auth for split deployment; four roles gate write operations |
-| AI | OpenAI (optional) + deterministic local engine | Natural-language interaction without a single point of failure; works air-gapped |
-| Packaging | Docker, Docker Compose | Single-command local and single-host deployment |
+| Auth | Email-first WorkOS SSO + httpOnly `supply_session` cookies; org-scoped API tokens | Enterprise SSO without provider buttons; no JWT in localStorage |
+| Multi-tenancy | `organization_id` on domain tables + PostgreSQL FORCE RLS | Shared-schema isolation for B2B SaaS |
+| Billing | Stripe Checkout, Customer Portal, signed webhooks (idempotent) | Seat/plan lifecycle for commercial pilots |
+| Connectors | Connector SDK: Dynamics 365 BC, Salesforce, UPS | Real OAuth/API integrations (sandbox-validated before GA) |
+| AI | OpenAI (optional) + deterministic local engine | Natural-language interaction without a single point of failure |
+| Packaging | Docker Compose (API + worker + Redis + Postgres + frontend) | Local parity with multi-service production |
 
 ---
 
@@ -288,8 +302,10 @@ From the repository root:
 ./start.sh
 ```
 
-This frees ports 3000 and 8000, seeds a SQLite database on first run, and starts both
-services. Open http://127.0.0.1:3000 and sign in with `ops@atlasops.io` / `ops12345`.
+This frees ports 3000 and 8000, prepares a SQLite database on first run, and starts both
+services. Open http://127.0.0.1:3000/login — enter your work email and Continue
+(WorkOS). For local-only sign-in when WorkOS is unset, enable
+`NEXT_PUBLIC_DEV_LOGIN=true` in development.
 Stop with `./stop.sh`.
 
 ---
@@ -322,16 +338,18 @@ set variables directly for local development. No secrets are committed to the re
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | `postgresql+psycopg://...` or `sqlite:///./dev.db` |
-| `JWT_SECRET_KEY` | Yes | Signing key for access tokens (32+ characters in production) |
-| `JWT_ALGORITHM` | No | Default: `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Default: `1440` (24 hours) |
-| `CORS_ORIGINS` | Yes | Comma-separated allowed origins for the frontend |
-| `OPENAI_API_KEY` | No | Enables OpenAI for the Copilot; omit to use the local engine |
-| `OPENAI_MODEL` | No | Default: `gpt-4o-mini` |
+| `DATABASE_URL` | Yes | `postgresql+psycopg://...` (production) or `sqlite:///./dev.db` (local) |
+| `SESSION_SECRET` | Yes | Session signing secret (32+ characters) |
+| `CREDENTIALS_ENCRYPTION_KEY` | Yes (prod) | Fernet key for connector credential encryption |
+| `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` | Yes (prod) | WorkOS AuthKit |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Yes (billing) | Stripe API + webhook verification |
+| `REDIS_URL` | Yes (connectors) | Queue for ARQ worker |
+| `REDIS_PASSWORD` | Yes (Compose prod) | Password injected into the bundled Redis service |
+| `CORS_ORIGINS` / `FRONTEND_URL` | Yes | Allowed browser origins |
 | `NEXT_PUBLIC_API_URL` | Yes (frontend) | Backend URL reachable from the browser |
-| `ENVIRONMENT` | No | `development` or `production` |
-| `SEED_ON_STARTUP` | No | Seed database on container start (Docker only) |
+| `ENVIRONMENT` | Yes (prod) | `production` fails closed without required secrets |
+| `FEATURE_BILLING_ENFORCE` | No | When `true`, plan seat/usage limits are enforced |
+| `SEED_ON_STARTUP` | No | Optional demo seed (never enable in production tenants) |
 
 ---
 
@@ -359,7 +377,7 @@ Frontend:
 
 ```bash
 cd frontend
-npm install
+npm ci
 cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev -- -H 0.0.0.0 -p 3000
 ```
@@ -367,7 +385,7 @@ npm run dev -- -H 0.0.0.0 -p 3000
 ### Tests
 
 ```bash
-cd backend && PYTHONPATH=. pytest
+cd backend && python -m pytest
 ```
 
 Integration tests run against an isolated SQLite database and cover authentication, RBAC,
@@ -375,99 +393,80 @@ and core API endpoints.
 
 ---
 
-## Demo Workspace
+## Local development auth
 
-The seed engine generates deterministic synthetic data so every surface is operational
-immediately. Four demo users are created with distinct roles:
+Production and staging use **email-first WorkOS SSO** (see [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)).
+For local development when WorkOS keys are unset and `ENVIRONMENT=development`,
+`POST /api/v1/auth/dev-login` is available and the login UI shows a dev form only when
+`NODE_ENV=development` and `NEXT_PUBLIC_DEV_LOGIN=true`. There are **no** shared demo passwords for production.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@atlasops.io` | `admin1234` |
-| Operations Manager | `ops@atlasops.io` | `ops12345` |
-| Analyst | `analyst@atlasops.io` | `analyst123` |
-| Executive | `exec@atlasops.io` | `exec12345` |
+Optional org data seeding (`python -m app.cli seed`) is for empty local databases only —
+never enable `SEED_ON_STARTUP` for customer tenants.
 
-> These are local demonstration credentials for a seeded dataset. They are not real
-> accounts and must be removed or replaced before any non-local deployment.
-
-Seed commands:
-
-```bash
-python -m app.cli init-db                              # create tables
-python -m app.cli seed --if-empty                      # seed only when empty
-python -m app.cli seed --scale demo                    # lighter dataset
-python -m app.cli seed --scale full                    # full dataset
-python -m app.cli create-user EMAIL NAME ROLE PASSWORD # add a user
-python -m app.cli reset                                # drop and recreate all tables
-```
 
 ---
 
 ## Enterprise Deployment
 
-**Single host (Docker Compose):** Suitable for internal deployments and pilots. Place a
-reverse proxy (Caddy, Nginx, Traefik) in front for TLS termination. Set strong values for
-`JWT_SECRET_KEY` and `POSTGRES_PASSWORD`.
+**Single host (Docker Compose):** Suitable for internal deployments and design-partner
+pilots. Place a reverse proxy (Caddy, Nginx, Traefik) in front for TLS. Set strong values
+for `SESSION_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD`. Include the
+`worker` + `redis` services for connector sync.
 
-**Split deployment:** Frontend on a managed host (e.g. Vercel), backend and PostgreSQL on
-a managed host (e.g. Railway or Render). Set `NEXT_PUBLIC_API_URL` to the backend's public
-URL and `CORS_ORIGINS` to the frontend's domain.
+**Split deployment:** Frontend on a managed host (e.g. Vercel), backend/worker/Redis and
+PostgreSQL on a managed host (e.g. Render). Set `NEXT_PUBLIC_API_URL` to the backend's
+public URL and `CORS_ORIGINS` / `FRONTEND_URL` to the frontend domain.
 
-The backend is stateless (JWT auth) and horizontally scalable behind a load balancer.
-PostgreSQL is the primary scaling consideration; read replicas can serve analytics
-queries as volume grows. Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+Sessions are cookie-based (not JWT). Scale API replicas behind a sticky or shared session
+store as needed; PostgreSQL and Redis are the primary data-plane scaling considerations.
+Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+**Human staging / design-partner ops:** follow [`docs/OPERATIONS_MANUAL.md`](docs/OPERATIONS_MANUAL.md)
+(deploy, WorkOS/Stripe/connectors, soak, k6 load, DR, Go/No-Go).
 
 ---
 
 ## Data Integration
 
-ATLASOPS supports two operating modes:
+Supply v2 is multi-tenant. Tenant data arrives through:
 
-- **Demo Mode (default).** A fully seeded dataset, no integration required.
-- **Connected Mode.** Bring your own data through file import and connectors.
+- **CSV / Excel import** — validate → preview → commit into tenant-owned domain tables,
+  with `ImportJob` + audit log rows.
+- **Connector SDK** — production connectors for **Dynamics 365 Business Central**,
+  **Salesforce**, and **UPS**. Credentials are encrypted at rest. Sync runs through the
+  connector registry (worker preferred for long jobs).
 
-CSV and Excel ingestion are fully implemented, with validation, column mapping, and
-per-row error reporting. Connector templates for SAP ERP, Oracle ERP, Salesforce CRM,
-Microsoft Dynamics, WMS, TMS, and generic REST APIs provide a foundation for enterprise
-integration; they are configurable templates rather than production-certified
-integrations. Every import and sync run is recorded by the Pipeline Monitor.
-
-Ingested records land in the same domain tables used by risk scoring, analytics, and the
-Copilot, so connected data activates the full platform automatically. See
-[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for the ingestion architecture.
+There is no simulated ERP sync path in the API. Other ERPs (SAP, Oracle) are **not**
+shipped connectors. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 
 ---
 
 ## Security
 
-ATLASOPS is built on concrete architectural decisions rather than absolute claims:
+Supply v2 security model (see [`SECURITY.md`](SECURITY.md) / [`docs/SECURITY.md`](docs/SECURITY.md)):
 
-- JWT authentication via an OAuth2 password flow, verified on every request
-- Role-based access control enforced per endpoint (least privilege)
-- bcrypt password hashing — credentials are never stored in plaintext
-- Pydantic validation of all requests and ingestion rows
-- Audit logging of sensitive actions
-- Environment-driven configuration — no secrets committed to the repository
-- Containerized, reproducible deployment
+- WorkOS authentication with httpOnly, Secure, SameSite session cookies
+- Organization membership + permission catalog (`require_permission`) on API routes
+- PostgreSQL FORCE RLS on tenant tables (`app.current_org_id` GUC)
+- Org-bound API tokens (`sup_…`); revoked/rotated tokens rejected
+- Stripe webhook signature verification + `stripe_events` idempotency
+- Encrypted connector credentials; production fails closed without required secrets
+- No demo passwords or JWT-in-localStorage auth path
 
-Change `JWT_SECRET_KEY` and database passwords before any non-local deployment, and serve
-the platform behind TLS. Connector API keys are stored masked; production deployments
-should use a secrets manager. See [`SECURITY.md`](SECURITY.md) for the full overview and
-vulnerability reporting process.
+Set `ENVIRONMENT=production` only with WorkOS, session secret, encryption key, and TLS.
 
 ---
 
 ## Roadmap
 
-A summary of planned work; see [`ROADMAP.md`](ROADMAP.md) for detail.
+Foundation complete for Supply v2. Remaining work toward GA (see [`ROADMAP.md`](ROADMAP.md)
+and [`docs/reports/RC1_RELEASE_READINESS.md`](docs/reports/RC1_RELEASE_READINESS.md)):
 
-- Multi-tenant data isolation and SSO (SAML/OIDC)
-- Background job queue for ingestion and risk recomputation
-- Production-ready ERP/WMS/TMS connectors with incremental sync and webhooks
-- Workflow execution (owner assignment, status tracking) on recommended actions
-- Real-time updates via WebSocket push
-- Statistical demand forecasting and multi-scenario simulation comparison
-- Audit log explorer UI and encrypted connector credential storage
+- Staging soak with live WorkOS, Stripe test mode, and one connector sandbox
+- Enqueue connector sync on the ARQ worker by default (not inline request)
+- Expand Playwright coverage for full browser onboarding once staging secrets exist
+- Audit log explorer UI and Settings surfaces for tokens/billing
+- Additional connectors beyond Dynamics BC, Salesforce, and UPS
 
 ---
 
@@ -495,8 +494,10 @@ atlasops/
 │   │   └── login/           authentication
 │   ├── components/          UI, charts, marketing, shared widgets
 │   └── lib/                 API client, auth, hooks, types
-├── docs/                    API, DATABASE, DEPLOYMENT, INTEGRATIONS
+├── docs/                    OPERATIONS_MANUAL, STAGING, API, DATABASE, …
+├── load/k6/                 Staging load tests
 ├── docker-compose.yml
+├── docker-compose.staging.yml
 ├── ARCHITECTURE.md · ROADMAP.md · SECURITY.md · CONTRIBUTING.md
 ├── CHANGELOG.md · CODE_OF_CONDUCT.md · LICENSE
 └── start.sh · stop.sh

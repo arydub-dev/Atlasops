@@ -12,13 +12,13 @@ from sqlalchemy.orm import Session
 from app.models import (
     Alert,
     Inventory,
-    Product,
     Shipment,
     Supplier,
     Warehouse,
 )
 from app.models.enums import AlertStatus, ShipmentStatus
 from app.services import metrics, risk_engine
+from app.tenancy.context import get_tenant
 
 
 # --------------------------------------------------------------------------- #
@@ -47,10 +47,11 @@ def health_score(kpis: dict, overall_risk: float) -> dict:
 # Situation report  (what is happening + why)
 # --------------------------------------------------------------------------- #
 def situation_report(db: Session) -> dict:
+    org_id = get_tenant().organization_id
     insights: list[dict] = []
 
     # 1) Delay momentum from the weekly delay trend
-    delay_trend = metrics.delay_trend(db, weeks=8)
+    delay_trend = metrics.delay_trend(db, org_id, weeks=8)
     delta_pct = 0.0
     if len(delay_trend) >= 2:
         prev = delay_trend[-2]["delayed_pct"]
@@ -71,14 +72,20 @@ def situation_report(db: Session) -> dict:
 
     # 2) Concentration: which supplier drives the most delays
     delayed_total = db.scalar(
-        select(func.count(Shipment.id)).where(Shipment.status == ShipmentStatus.DELAYED)
+        select(func.count(Shipment.id)).where(
+            Shipment.organization_id == org_id,
+            Shipment.status == ShipmentStatus.DELAYED,
+        )
     ) or 0
     top_supplier_text = None
     if delayed_total:
         row = db.execute(
             select(Supplier.name, func.count(Shipment.id).label("c"))
             .join(Shipment, Shipment.supplier_id == Supplier.id)
-            .where(Shipment.status == ShipmentStatus.DELAYED)
+            .where(
+                Shipment.organization_id == org_id,
+                Shipment.status == ShipmentStatus.DELAYED,
+            )
             .group_by(Supplier.name)
             .order_by(func.count(Shipment.id).desc())
             .limit(1)
@@ -103,7 +110,9 @@ def situation_report(db: Session) -> dict:
             Warehouse.name,
             Warehouse.id,
             (Warehouse.current_inventory * 100.0 / Warehouse.capacity).label("util"),
-        ).order_by((Warehouse.current_inventory * 1.0 / Warehouse.capacity).desc())
+        )
+        .where(Warehouse.organization_id == org_id)
+        .order_by((Warehouse.current_inventory * 1.0 / Warehouse.capacity).desc())
     ).first()
     if wh_row:
         name, wid, util = wh_row
@@ -111,6 +120,7 @@ def situation_report(db: Session) -> dict:
         low = db.execute(
             select(Inventory.quantity, Inventory.avg_daily_demand)
             .where(
+                Inventory.organization_id == org_id,
                 Inventory.is_current.is_(True),
                 Inventory.warehouse_id == wid,
                 Inventory.avg_daily_demand > 0,
@@ -140,7 +150,10 @@ def situation_report(db: Session) -> dict:
 
     # 4) Open critical alert pressure
     open_alerts = db.scalar(
-        select(func.count(Alert.id)).where(Alert.status != AlertStatus.RESOLVED)
+        select(func.count(Alert.id)).where(
+            Alert.organization_id == org_id,
+            Alert.status != AlertStatus.RESOLVED,
+        )
     ) or 0
     if open_alerts:
         insights.append(
@@ -159,28 +172,77 @@ def situation_report(db: Session) -> dict:
 # Ranked recommended actions  (what to do next)
 # --------------------------------------------------------------------------- #
 def recommended_actions(db: Session, limit: int = 5) -> list[dict]:
+    """Ranked decision objects for Mission Control.
+
+    Each action includes reason, priority, affected entities, estimated impact/cost,
+    confidence, and a concrete next step — estimates are labeled as such.
+    """
     actions: list[dict] = []
     risk = risk_engine.summarize(db)
 
     for r in risk["top_risks"][: limit + 3]:
         impact, cost = _impact_cost(db, r)
+        confidence = round(min(0.95, 0.45 + (r.score / 200)), 2)
         actions.append(
             {
                 "priority": r.level.value,
                 "title": r.title,
+                "reason": r.description or r.title,
                 "detail": r.recommendation,
                 "expected_impact": impact,
+                "estimated_impact": impact,
                 "estimated_cost": cost,
+                "confidence": confidence,
+                "recommended_next_step": r.recommendation,
                 "category": r.category.value,
                 "entity_type": r.entity_type,
-                "entity_id": r.entity_id,
+                "entity_id": str(r.entity_id) if r.entity_id else None,
+                "affected_entities": [
+                    {
+                        "type": r.entity_type,
+                        "id": str(r.entity_id) if r.entity_id else None,
+                    }
+                ]
+                if r.entity_type
+                else [],
                 "score": r.score,
+                "estimate_label": "modeled_estimate",
             }
         )
 
+    # Surface critical open alerts as actions when risk rows are thin
+    if len(actions) < limit:
+        for a in critical_feed(db, limit=limit):
+            actions.append(
+                {
+                    "priority": a["priority"],
+                    "title": a["title"],
+                    "reason": a["message"],
+                    "detail": a["recommended_response"],
+                    "expected_impact": "Reduce alert exposure",
+                    "estimated_impact": "Reduce alert exposure",
+                    "estimated_cost": "$ low",
+                    "confidence": 0.7,
+                    "recommended_next_step": a["recommended_response"],
+                    "category": "alert",
+                    "entity_type": "alert",
+                    "entity_id": str(a["id"]),
+                    "affected_entities": [{"type": "alert", "id": str(a["id"])}],
+                    "score": 80 if a["priority"] == "critical" else 60,
+                    "estimate_label": "operational_guidance",
+                }
+            )
+
     priority_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    actions.sort(key=lambda a: (priority_rank.get(a["priority"], 9), -a["score"]))
-    return actions[:limit]
+    # Deduplicate by title
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for a in sorted(actions, key=lambda x: (priority_rank.get(x["priority"], 9), -x["score"])):
+        if a["title"] in seen:
+            continue
+        seen.add(a["title"])
+        deduped.append(a)
+    return deduped[:limit]
 
 
 def _impact_cost(db, r) -> tuple[str, str]:
@@ -212,9 +274,11 @@ _RESPONSES = {
 def critical_feed(db: Session, limit: int = 6) -> list[dict]:
     from app.models.enums import AlertPriority
 
+    org_id = get_tenant().organization_id
     alerts = db.scalars(
         select(Alert)
         .where(
+            Alert.organization_id == org_id,
             Alert.status != AlertStatus.RESOLVED,
             Alert.priority.in_([AlertPriority.CRITICAL, AlertPriority.HIGH]),
         )
@@ -239,7 +303,8 @@ def critical_feed(db: Session, limit: int = 6) -> list[dict]:
 # Executive brief  (management-consulting style)
 # --------------------------------------------------------------------------- #
 def executive_brief(db: Session) -> dict:
-    kpis = metrics.compute_kpis(db)
+    org_id = get_tenant().organization_id
+    kpis = metrics.compute_kpis(db, org_id)
     risk = risk_engine.summarize(db)
     overall_risk = risk["overall_score"]
     health = health_score(kpis, overall_risk)

@@ -1,9 +1,9 @@
-name: atlasops
+name: supply
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: atlasops-postgres
+    container_name: supply-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-atlasops}
@@ -19,31 +19,73 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: supply-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: atlasops-backend
+    container_name: supply-backend
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-atlasops}:${POSTGRES_PASSWORD:-atlasops}@db:5432/${POSTGRES_DB:-atlasops}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production-please-32chars-min}
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-session-secret-min-32-chars!!}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      WORKOS_REDIRECT_URI: ${WORKOS_REDIRECT_URI:-http://localhost:8000/api/v1/auth/callback}
+      WORKOS_COOKIE_PASSWORD: ${WORKOS_COOKIE_PASSWORD:-change-me-workos-cookie-password-32ch}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+      SEED_ON_STARTUP: "false"
+      FEATURE_DEMO_SANDBOX: ${FEATURE_DEMO_SANDBOX:-false}
+      FEATURE_BILLING_ENFORCE: ${FEATURE_BILLING_ENFORCE:-false}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     command: >
-      sh -c "python -m app.cli init-db &&
-             python -m app.cli seed --if-empty &&
+      sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: supply-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-atlasops}:${POSTGRES_PASSWORD:-atlasops}@db:5432/${POSTGRES_DB:-atlasops}
+      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-session-secret-min-32-chars!!}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    command: >
+      sh -c "arq app.worker.WorkerSettings"
 
   frontend:
     build:
@@ -51,12 +93,14 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    container_name: atlasops-frontend
+        NEXT_PUBLIC_DEV_LOGIN: ${NEXT_PUBLIC_DEV_LOGIN:-true}
+    container_name: supply-frontend
     restart: unless-stopped
     depends_on:
       - backend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_DEV_LOGIN: ${NEXT_PUBLIC_DEV_LOGIN:-true}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 

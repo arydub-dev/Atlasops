@@ -7,43 +7,53 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models import Alert, RiskAssessment, Shipment, Supplier, User, Warehouse
+from app.api.deps import get_db_with_tenant, require_permission
+from app.models import Alert, RiskAssessment, Shipment, Supplier, Warehouse
 from app.models.enums import AlertStatus, ShipmentStatus
 from app.services import geo
+from app.tenancy.context import TenantContext
 
 router = APIRouter(prefix="/network", tags=["Network View"])
 
 
 @router.get("")
 def network(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_with_tenant),
+    ctx: TenantContext = Depends(require_permission("network.read")),
 ) -> dict:
-    warehouses = db.scalars(select(Warehouse)).all()
+    org_id = ctx.organization_id
+    warehouses = db.scalars(
+        select(Warehouse).where(Warehouse.organization_id == org_id)
+    ).all()
 
-    # active shipments per warehouse
     active_by_wh = dict(
         db.execute(
             select(Shipment.warehouse_id, func.count(Shipment.id))
-            .where(Shipment.status != ShipmentStatus.DELIVERED)
+            .where(
+                Shipment.organization_id == org_id,
+                Shipment.status != ShipmentStatus.DELIVERED,
+            )
             .group_by(Shipment.warehouse_id)
         ).all()
     )
-    # open alerts per warehouse
     alerts_by_wh = dict(
         db.execute(
             select(Alert.entity_id, func.count(Alert.id))
-            .where(Alert.entity_type == "warehouse", Alert.status != AlertStatus.RESOLVED)
+            .where(
+                Alert.organization_id == org_id,
+                Alert.entity_type == "warehouse",
+                Alert.status != AlertStatus.RESOLVED,
+            )
             .group_by(Alert.entity_id)
         ).all()
     )
-    # risk score per warehouse
     risk_by_wh = dict(
         db.execute(
             select(RiskAssessment.entity_id, func.max(RiskAssessment.score))
-            .where(RiskAssessment.entity_type == "warehouse")
+            .where(
+                RiskAssessment.organization_id == org_id,
+                RiskAssessment.entity_type == "warehouse",
+            )
             .group_by(RiskAssessment.entity_id)
         ).all()
     )
@@ -53,7 +63,7 @@ def network(
         nodes.append(
             {
                 "id": f"wh-{w.id}",
-                "entity_id": w.id,
+                "entity_id": str(w.id),
                 "type": "warehouse",
                 "name": w.name,
                 "location": w.location,
@@ -70,7 +80,6 @@ def network(
             }
         )
 
-    # supplier nodes — placed at region centroid with deterministic jitter
     supplier_rows = db.execute(
         select(
             Supplier.id,
@@ -81,18 +90,18 @@ def network(
             func.count(Shipment.id),
         )
         .join(Shipment, Shipment.supplier_id == Supplier.id, isouter=True)
-        .where(Supplier.is_active.is_(True))
+        .where(Supplier.organization_id == org_id, Supplier.is_active.is_(True))
         .group_by(Supplier.id)
         .order_by(func.count(Shipment.id).desc())
         .limit(30)
     ).all()
     for sid, name, region, country, score, ship_count in supplier_rows:
         base_lat, base_lon = geo.region_centroid(region)
-        dlat, dlon = geo.jitter(sid, scale=14.0)
+        dlat, dlon = geo.jitter(int(sid.int % 10_000_000), scale=14.0)
         nodes.append(
             {
                 "id": f"sup-{sid}",
-                "entity_id": sid,
+                "entity_id": str(sid),
                 "type": "supplier",
                 "name": name,
                 "location": country,
@@ -105,7 +114,6 @@ def network(
             }
         )
 
-    # route edges — aggregate active shipments by (origin city -> destination warehouse)
     wh_coords = {w.id: (w.latitude, w.longitude, w.name, w.location) for w in warehouses}
     route_rows = db.execute(
         select(
@@ -113,14 +121,19 @@ def network(
             Shipment.warehouse_id,
             func.count(Shipment.id),
         )
-        .where(Shipment.status != ShipmentStatus.DELIVERED)
+        .where(
+            Shipment.organization_id == org_id,
+            Shipment.status != ShipmentStatus.DELIVERED,
+        )
         .group_by(Shipment.origin, Shipment.warehouse_id)
     ).all()
 
-    # delayed counts per (origin, warehouse) in a single pass
     delayed_rows = db.execute(
         select(Shipment.origin, Shipment.warehouse_id, func.count(Shipment.id))
-        .where(Shipment.status == ShipmentStatus.DELAYED)
+        .where(
+            Shipment.organization_id == org_id,
+            Shipment.status == ShipmentStatus.DELAYED,
+        )
         .group_by(Shipment.origin, Shipment.warehouse_id)
     ).all()
     delayed_map = {(o, w): c for o, w, c in delayed_rows}
@@ -164,5 +177,22 @@ def network(
             "warehouses": len(warehouses),
             "suppliers": len(supplier_rows),
             "active_routes": len(edges),
+        },
+        "mapbox": {
+            "enabled": bool(__import__("app.core.config", fromlist=["settings"]).settings.MAPBOX_TOKEN),
+            "token_configured": bool(
+                __import__("app.core.config", fromlist=["settings"]).settings.MAPBOX_TOKEN
+            ),
+        },
+        "overlays": {
+            "delayed_routes": sum(1 for e in edges if e.get("delayed")),
+            "high_risk_warehouses": sum(
+                1 for n in nodes if n.get("type") == "warehouse" and (n.get("risk_score") or 0) >= 60
+            ),
+            "low_score_suppliers": sum(
+                1
+                for n in nodes
+                if n.get("type") == "supplier" and (n.get("supplier_score") or 100) < 55
+            ),
         },
     }

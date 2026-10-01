@@ -27,7 +27,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "About", href: "/about" },
       { label: "Login", href: "/login" },
       { label: "Get Started", href: "/get-started" },
-      { label: "Book a Demo", href: "/get-started" },
+      { label: "Book a Demo", href: "/contact" },
     ],
   },
 ];
@@ -44,7 +44,7 @@ export function MarketingFooter() {
               monitor risk, and coordinate decisions across your operation.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              {["Cloud-native", "API-first", "Multi-tenant ready"].map((b) => (
+              {["Cloud-native", "API-first", "Multi-tenant available"].map((b) => (
                 <span
                   key={b}
                   className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground"
@@ -77,17 +77,14 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center">
-          <p>© {new Date().getFullYear()} ATLASOPS, Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} ATLASOPS All rights reserved.</p>
           <div className="flex items-center gap-5">
             <Link href="/security" className="hover:text-foreground">
               Security
             </Link>
-            <span className="hover:text-foreground">Privacy</span>
-            <span className="hover:text-foreground">Terms</span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
-              All systems operational
-            </span>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+
           </div>
         </div>
       </div>
