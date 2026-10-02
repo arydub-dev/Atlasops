@@ -234,7 +234,6 @@ def supplier_performance_trend(
                 Supplier.organization_id == organization_id
             )
         )
-        or 80.0
     )
     avg_reliability = (
         db.scalar(
@@ -242,8 +241,9 @@ def supplier_performance_trend(
                 Supplier.organization_id == organization_id
             )
         )
-        or 90.0
     )
+    if avg_score is None or avg_reliability is None:
+        return []
     label = _utcnow().strftime("%b %Y")
     return [
         {

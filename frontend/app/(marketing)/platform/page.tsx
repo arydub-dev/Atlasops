@@ -156,7 +156,7 @@ const FEATURES: Feature[] = [
     eyebrow: "Inventory Intelligence",
     title: "Visibility without blind spots",
     body: "Understand stock positions, forecasts and reorder points across every warehouse, with recommendations that protect availability and capital.",
-    points: ["Stock visibility & forecasts", "Reorder recommendations", "Warehouse optimization"],
+    points: ["Stock visibility & shortage indicators", "Reorder recommendations", "Warehouse utilization"],
     visual: <MiniBars />,
   },
   {
