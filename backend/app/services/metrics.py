@@ -273,6 +273,8 @@ def inventory_health_breakdown(db: Session, organization_id: UUID) -> dict:
                 case(
                     (
                         (Inventory.max_stock > 0)
+                        & (Inventory.quantity > 0)
+                        & (Inventory.quantity > Inventory.reorder_point)
                         & (Inventory.quantity >= Inventory.max_stock),
                         1,
                     ),

@@ -1,0 +1,2 @@
+warehouse_name,product_sku,quantity,reorder_point,safety_stock,max_stock,avg_daily_demand
+Pilot DC,PILOT-1,20,10,2,30,1
