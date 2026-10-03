@@ -409,6 +409,27 @@ def commit_import(
         try:
             obj = _build_entity(entity, norm, wh_by_name, prod_by_sku, organization_id)
             with db.begin_nested():
+                if entity == "inventory":
+                    # Serialize file imports for this warehouse before resolving a
+                    # current position; two uploads must not create two positions.
+                    db.scalar(select(Warehouse).where(
+                        Warehouse.id == obj.warehouse_id,
+                        Warehouse.organization_id == organization_id,
+                    ).with_for_update())
+                    current = db.scalars(select(Inventory).where(
+                        Inventory.organization_id == organization_id,
+                        Inventory.warehouse_id == obj.warehouse_id,
+                        Inventory.product_id == obj.product_id,
+                        Inventory.is_current.is_(True),
+                    ).with_for_update()).all()
+                    if len(current) > 1:
+                        raise ValueError("Multiple current inventory positions exist; reconcile them before importing")
+                    if current:
+                        existing = current[0]
+                        for field in ("quantity", "reorder_point", "safety_stock", "max_stock", "avg_daily_demand"):
+                            setattr(existing, field, getattr(obj, field))
+                        existing.snapshot_date = _utcnow()
+                        obj = existing
                 db.add(obj)
                 db.flush()
             imported += 1

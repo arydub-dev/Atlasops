@@ -233,7 +233,7 @@ export default function MissionControlPage() {
               ]}
             />
           </ChartCard>
-          <ChartCard title="Network Utilization" description="Inventory capacity used over time">
+          <ChartCard title="Network Utilization" description="Current capacity utilization snapshot">
             <AreaTrend
               data={data.inventory_trend}
               xKey="label"
@@ -242,7 +242,7 @@ export default function MissionControlPage() {
               series={[{ key: "utilization", name: "Utilization %", color: CHART_COLORS.cyan }]}
             />
           </ChartCard>
-          <ChartCard title="Supplier Performance" description="Score & delivery reliability">
+          <ChartCard title="Supplier Performance" description="Current supplier averages; not a historical trend">
             <LineTrend
               data={data.supplier_performance_trend}
               xKey="label"
