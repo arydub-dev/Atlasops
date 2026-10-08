@@ -23,5 +23,5 @@ def allowed(db, user_id, org_id):
         and org and not org.deleted_at and org.status not in {OrgStatus.DELETED, OrgStatus.SUSPENDED}
         and (org.settings or {}).get("private_demo") is True
         and len(memberships) == 1 and memberships[0].organization_id == org_id
-        and memberships[0].role_slug == "viewer" and not memberships[0].custom_permissions
+        and memberships[0].role_slug in {"viewer", "demo_operator"} and not memberships[0].custom_permissions
         and org.owner_user_id != user.id)

@@ -113,6 +113,8 @@ def build_tenant_context(
     elif membership.role_slug.startswith("custom:"):
         custom = frozenset()
     perms = permissions_for_role(membership.role_slug, custom)
+    if membership.role_slug == "demo_operator" and (org.settings or {}).get("private_demo") is not True:
+        perms = frozenset()
     return TenantContext(
         organization_id=org.id,
         user_id=user.id,

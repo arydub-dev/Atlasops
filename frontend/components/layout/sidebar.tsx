@@ -81,10 +81,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { currentMembership, user } = useAuth();
   const role = currentMembership?.role_slug;
   const [feed, setFeed] = useState<FeedState>("checking");
+  const [advanced, setAdvanced] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '');
 
     async function ping() {
       try {
@@ -110,6 +111,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) =>
+      (advanced || ['/mission-control','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources/import','/advisor','/settings'].includes(item.href)) &&
+      !(role === 'viewer' && item.href === '/advisor') &&
       navVisibleForRole(item.access, role, { isPlatformAdmin: !!user?.is_platform_admin })
     ),
   })).filter((group) => group.items.length > 0);
@@ -130,6 +133,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+        <button className="px-3 text-xs text-muted-foreground underline" onClick={()=>setAdvanced(!advanced)}>{advanced?'Show core workflow':'Show all tools'}</button>
         {groups.map((group, gi) => (
           <div key={gi} className="space-y-1">
             {group.label && (

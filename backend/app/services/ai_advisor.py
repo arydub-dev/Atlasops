@@ -131,6 +131,12 @@ def build_context(db: Session) -> dict:
     if "connectors.read" in perms:
         ctx["data_sources"] = _safe_data_context(db)
 
+    if {'inventory.read','warehouses.read','shipments.read','suppliers.read','alerts.read'}.issubset(perms):
+        from app.services.priorities import operational_priorities
+        priorities = operational_priorities(db,org_id)
+        ctx['operational_priorities'] = [{key:item[key] for key in ('title','severity','explanation','recommendation','method')} for item in priorities['items'][:10]]
+        ctx['priority_ranking'] = priorities['ranking']
+
     return ctx
 
 
@@ -231,6 +237,15 @@ def _answer_locally(prompt: str, context: dict) -> str:
         return _data_sources_answer(context)
     if any(k in p for k in ("delay", "late", "increasing this week")):
         return _delay_answer(context)
+    matching = [row for row in context.get("inventory_priorities", []) if row['sku'].lower() in p or row['warehouse'].lower() in p]
+    if matching:
+        return _inventory_answer({**context, 'inventory_priorities':matching})
+    if context.get('operational_priorities') and any(k in p for k in ('urgent','address first','what should','operational issues','priorities','problems right now')):
+        lines=['Recorded operational priorities',context['priority_ranking']]
+        for item in context['operational_priorities']:
+            lines.extend([f"- {item['severity']}: {item['title']}",f"  Evidence: {item['explanation']}",f"  Recommendation: {item['recommendation']}"])
+        lines.append('These are recommendations. No supplier has been contacted, no order placed, and no stock changed.')
+        return '\n'.join(lines)
     if context.get("inventory_priorities") and any(k in p for k in ("warehouse", "stockout", "inventory", "replenish", "urgent", "what should", "operational issues")):
         return _inventory_answer(context)
     if any(k in p for k in ("warehouse", "stockout", "inventory")):

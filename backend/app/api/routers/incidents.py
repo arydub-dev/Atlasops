@@ -103,6 +103,7 @@ def resolve_incident(
 class IncidentProgress(BaseModel):
     status: IncidentStatus | None = None
     assign_to_me: bool = False
+    note: str = Field(default="", max_length=4000)
 
 
 @router.patch("/{incident_id}")
@@ -129,6 +130,7 @@ def update_progress(incident_id: UUID, payload: IncidentProgress,
     from app.services.timeline import record_event
     record_event(db, organization_id=ctx.organization_id, title=f"Incident progress: {inc.status.value}",
         event_type="alert", entity_type="incident", entity_id=inc.id, severity="info",
+        message=payload.note.strip() or None,
         payload={"status":inc.status.value,"owner_user_id":str(inc.owner_user_id) if inc.owner_user_id else None})
     db.commit()
     return incident_service.incident_detail(db,ctx.organization_id,inc.id)

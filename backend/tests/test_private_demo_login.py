@@ -57,3 +57,13 @@ def test_another_membership_blocks_login(client,demo,db,org_b):
     db.add(Membership(organization_id=org_b[0].id,user_id=demo[0].id,role_slug='viewer',status=MembershipStatus.ACTIVE))
     db.commit()
     assert login(client).status_code==401
+
+
+def test_demo_operator_can_act_without_administration(client,demo,db):
+    demo[1].role_slug='demo_operator'; db.commit()
+    assert login(client).status_code==200
+    assert client.get('/api/v1/data/entities').status_code==200
+    incident=client.post('/api/v1/incidents',json={'title':'Demo operational issue','severity':'high'})
+    assert incident.status_code==201,incident.text
+    assert client.post('/api/v1/data/demo/reset').status_code==403
+    assert client.post('/api/v1/data/sources',json={}).status_code in {403,405}

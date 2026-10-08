@@ -96,6 +96,13 @@ ALL_PERMISSIONS: Final[frozenset[str]] = frozenset(PERMISSIONS)
 
 # System role slug → permissions
 SYSTEM_ROLES: Final[dict[str, frozenset[str]]] = {
+    "demo_operator": frozenset(p for p in PERMISSIONS if p in {
+        "org.read", "mission.read", "network.read", "analytics.read", "ai.chat",
+        "suppliers.read", "warehouses.read", "products.read", "shipments.read", "inventory.read",
+        "suppliers.create", "warehouses.create", "products.create", "shipments.create", "inventory.create",
+        "products.update", "shipments.update", "inventory.update", "imports.create", "imports.read",
+        "alerts.read", "alerts.create", "alerts.update", "alerts.resolve", "risk.read", "connectors.read"
+    }),
     "owner": ALL_PERMISSIONS,
     "admin": frozenset(p for p in PERMISSIONS if p not in {"org.delete", "org.transfer_ownership"}),
     "operations_director": frozenset(

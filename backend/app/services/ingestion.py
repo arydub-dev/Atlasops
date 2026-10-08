@@ -141,6 +141,9 @@ ENTITY_SPECS: dict[str, dict] = {
         "label": "Shipments",
         "fields": [
             {"name": "reference", "label": "Reference", "required": True, "type": "str", "unique": True},
+            {"name": "product_sku", "label": "Product SKU", "required": False, "type": "str"},
+            {"name": "warehouse_name", "label": "Destination Warehouse Name", "required": False, "type": "str"},
+            {"name": "supplier_name", "label": "Supplier Name", "required": False, "type": "str"},
             {"name": "eta", "label": "ETA (ISO date/time)", "required": False, "type": "datetime"},
             {"name": "origin", "label": "Origin", "required": True, "type": "str"},
             {"name": "destination", "label": "Destination", "required": True, "type": "str"},
@@ -399,8 +402,9 @@ def commit_import(
             index[key] = item if key not in index else None
         return index
 
-    wh_by_name = unambiguous_index(Warehouse, "name") if entity == "inventory" else {}
-    prod_by_sku = unambiguous_index(Product, "sku") if entity == "inventory" else {}
+    wh_by_name = unambiguous_index(Warehouse, "name") if entity in {"inventory","shipments"} else {}
+    prod_by_sku = unambiguous_index(Product, "sku") if entity in {"inventory","shipments"} else {}
+    supplier_by_name = unambiguous_index(Supplier, "name") if entity == "shipments" else {}
 
     for idx, raw in enumerate(rows):
         norm, row_errors = _transform_row(spec, raw, mapping)
@@ -410,6 +414,12 @@ def commit_import(
                 errors.append({"row": idx + 1, "errors": row_errors})
             continue
         try:
+            if entity == "shipments":
+                for field,target,index in [('product_sku','product_id',prod_by_sku),('warehouse_name','warehouse_id',wh_by_name),('supplier_name','supplier_id',supplier_by_name)]:
+                    if field in norm:
+                        record=index.get(norm.pop(field).strip().casefold())
+                        if record is None: raise ValueError(f"{field}: no unique match in this organization")
+                        norm[target]=record.id
             obj = _build_entity(entity, norm, wh_by_name, prod_by_sku, organization_id)
             outcome = "created"
             with db.begin_nested():
@@ -428,6 +438,8 @@ def commit_import(
                     outcome = "unchanged"
                     for field, column in mapping.items():
                         if column and raw.get(column) is not None and str(raw[column]).strip():
+                            if entity == "shipments":
+                                field={'product_sku':'product_id','warehouse_name':'warehouse_id','supplier_name':'supplier_id'}.get(field,field)
                             if getattr(existing, field) != getattr(obj, field):
                                 outcome = "updated"
                             setattr(existing, field, getattr(obj, field))

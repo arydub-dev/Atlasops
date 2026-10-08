@@ -24,7 +24,8 @@ export default function IncidentDetailPage() {
     params.id,
   ]);
   const { user, currentMembership } = useAuth();
-  const canResolve = ["owner", "admin", "operations_director", "operations_manager", "warehouse_manager", "transportation"].includes(currentMembership?.role_slug || "");
+  const canResolve = ["owner", "admin", "operations_director", "operations_manager", "warehouse_manager", "transportation", "demo_operator"].includes(currentMembership?.role_slug || "");
+  const [note, setNote] = useState("");
   const [actionError, setActionError] = useState("");
   const [resolution, setResolution] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,10 +45,10 @@ export default function IncidentDetailPage() {
     }
   }
 
-  async function progress(body: { status?: string; assign_to_me?: boolean }) {
+  async function progress(body: { status?: string; assign_to_me?: boolean; note?: string }) {
     if (busy) return;
     setBusy(true); setActionError("");
-    try { await api.patch(`/incidents/${params.id}`, body); await refetch(); }
+    try { await api.patch(`/incidents/${params.id}`, body); await refetch(); setNote(""); }
     catch (e) { setActionError(e instanceof Error ? e.message : "Update failed"); }
     finally { setBusy(false); }
   }
@@ -70,6 +71,7 @@ export default function IncidentDetailPage() {
       </PageHeader>
 
       {actionError && <p role="alert" className="text-destructive">{actionError}</p>}
+      {open && canResolve && <div className="flex gap-2"><Input aria-label="Progress note" value={note} onChange={e=>setNote(e.target.value)} maxLength={4000} placeholder="Add a progress note"/><Button disabled={busy || !note.trim()} onClick={()=>progress({note:note.trim()})}>Save note</Button></div>}
       {open && canResolve && <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" disabled={busy || data.owner_user_id === user?.id} onClick={() => progress({assign_to_me:true})}>{data.owner_user_id === user?.id ? "Assigned to you" : "Assign to me"}</Button>
         {data.status === "open" && <Button disabled={busy} onClick={() => progress({status:"investigating"})}>Start investigation</Button>}
@@ -138,7 +140,7 @@ export default function IncidentDetailPage() {
                     <span className="text-[11px] text-muted-foreground">{relativeTime(e.occurred_at)}</span>
                   )}
                 </div>
-                {e.summary && <p className="text-xs text-muted-foreground">{e.summary}</p>}
+                {(e.message || e.summary) && <p className="text-xs text-muted-foreground">{e.message || e.summary}</p>}
               </li>
             ))}
             {(data.timeline || []).length === 0 && (

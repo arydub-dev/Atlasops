@@ -328,6 +328,7 @@ export interface CriticalAlertItem {
 }
 
 export interface TimelineEvent {
+  message?: string | null;
   id: string;
   title: string;
   summary?: string;
