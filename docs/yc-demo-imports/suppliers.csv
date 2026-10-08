@@ -1,0 +1,5 @@
+"name","country","region","category","supplier_score","delivery_reliability","average_delay_days","order_fulfillment_rate","defect_rate"
+"Apex Industrial Components","India","South Asia","Industrial components","75","75","0.5","100","0"
+"Meridian Motion Systems","India","South Asia","Industrial components","75","75","0.5","100","0"
+"Nova Mechanical Supply","India","South Asia","Industrial components","75","75","0.5","100","0"
+"Vertex Controls","India","South Asia","Industrial components","75","75","0.5","100","0"

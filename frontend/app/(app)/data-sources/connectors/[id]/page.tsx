@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ConnectorIcon, HealthDot, StatusBadge } from "@/components/data/data-bits";
 
-const FREQS = ["Real-time", "Every 15 min", "Hourly", "Daily", "Weekly"];
+const FREQS = ["Manual", "Every 15 min", "Hourly", "Daily", "Weekly"];
 
 function customerReason(source: DataSource): string {
   const raw = `${source.failure_class || ""} ${source.last_error || ""}`.toLowerCase();
@@ -30,10 +30,10 @@ function customerReason(source: DataSource): string {
     return "Authentication expired";
   }
   if (raw.includes("429") || raw.includes("rate")) {
-    return "Salesforce is temporarily rate-limited. Try again shortly.";
+    return "The provider is temporarily rate-limited. Try again shortly.";
   }
   if (raw.includes("timeout") || raw.includes("network") || raw.includes("503") || raw.includes("502")) {
-    return "Salesforce is temporarily unavailable. The sync will retry automatically.";
+    return "The provider is temporarily unavailable. The sync will retry automatically.";
   }
   if (source.last_error) {
     return source.last_error;
@@ -56,6 +56,9 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
   const [clientSecret, setClientSecret] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [companyDb, setCompanyDb] = useState("");
+  const [mappingJson, setMappingJson] = useState("[]");
+  const [saveError, setSaveError] = useState("");
   const [sandbox, setSandbox] = useState(false);
   const [auth, setAuth] = useState("");
   const [freq, setFreq] = useState("");
@@ -77,6 +80,7 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
         setFreq(s.sync_frequency ?? "");
         setWebhook(s.webhook_url ?? "");
         setSandbox(Boolean(s.config?.sandbox));
+        setMappingJson(JSON.stringify(s.config?.sync_entities ?? [], null, 2));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Not found"));
     api.get<IntegrationTemplate[]>("/data/integrations").then(setTemplates).catch(() => {});
@@ -99,6 +103,7 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
   const template = templates.find((t) => t.type === source.connector_type);
   const authMethods = template?.auth_methods ?? ["API Key", "OAuth2", "Basic", "None"];
   const isSalesforce = source.connector_type === "salesforce" || source.connector_type === "salesforce_crm";
+  const isSap = source.connector_type === "sap_business_one";
   const notConnected = source.status === "not_configured" || source.status === "disconnected";
   const inProgress = source.status === "syncing" || syncing;
   const failed = source.status === "error";
@@ -106,6 +111,7 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
   async function save() {
     setSaving(true);
     setSaved(false);
+    setSaveError("");
     try {
       const credentials: Record<string, string> = {};
       if (isSalesforce) {
@@ -113,14 +119,24 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
         if (clientSecret) credentials.client_secret = clientSecret;
         if (username) credentials.username = username;
         if (password) credentials.password = password;
+      } else if (isSap) {
+        if (username) credentials.username = username;
+        if (password) credentials.password = password;
+        if (companyDb) credentials.company_db = companyDb;
       } else if (apiKey) {
         credentials.api_key = apiKey;
       }
+      const config: Record<string, unknown> = isSalesforce ? { sandbox } : {};
+      if (isSalesforce || isSap) {
+        const mappings: unknown = JSON.parse(mappingJson);
+        if (!Array.isArray(mappings) || mappings.length === 0) throw new Error("Add explicit entity mappings before saving this connector.");
+        config.sync_entities = mappings;
+      }
       const updated = await api.put<DataSource>(`/data/sources/${id}/config`, {
         base_url: baseUrl,
-        api_key: !isSalesforce && apiKey ? apiKey : undefined,
+        api_key: !isSalesforce && !isSap && apiKey ? apiKey : undefined,
         credentials: Object.keys(credentials).length ? credentials : undefined,
-        config: isSalesforce ? { sandbox } : undefined,
+        config,
         auth_method: auth || undefined,
         sync_frequency: freq || undefined,
         webhook_url: webhook || undefined,
@@ -131,6 +147,8 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
       setPassword("");
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save connector");
     } finally {
       setSaving(false);
     }
@@ -305,6 +323,24 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
               </div>
             </div>
 
+            {isSap && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">SAP Business One Service Layer v4. Enter an operator-approved HTTPS endpoint ending in /b1s/v2. Use a dedicated read-only integration user.</p>
+                <Label htmlFor="sap-company">Company database</Label>
+                <Input id="sap-company" value={companyDb} onChange={(e) => setCompanyDb(e.target.value)} placeholder="Enter to update stored value" disabled={!canWrite} />
+                <Label htmlFor="sap-user">Integration username</Label>
+                <Input id="sap-user" value={username} onChange={(e) => setUsername(e.target.value)} disabled={!canWrite} />
+                <Label htmlFor="sap-password">Password</Label>
+                <Input id="sap-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Stored encrypted" disabled={!canWrite} />
+              </div>
+            )}
+            {(isSalesforce || isSap) && (
+              <div className="space-y-2">
+                <Label htmlFor="sync-mappings">Explicit entity mappings (JSON)</Label>
+                <p className="text-sm text-muted-foreground">Supervised pilot configuration: select source objects, destination fields and order status mappings with your implementation contact. Sync refreshes up to 10,000 records per object. Orders include headers only; source deletions are not applied. Sandbox reconciliation is required before daily use.</p>
+                <textarea id="sync-mappings" className="min-h-48 w-full rounded border bg-background p-3 font-mono text-xs" value={mappingJson} onChange={(e) => setMappingJson(e.target.value)} disabled={!canWrite} spellCheck={false} />
+              </div>
+            )}
             {isSalesforce ? (
               <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -364,7 +400,7 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
                   Sandbox (test.salesforce.com)
                 </label>
               </>
-            ) : (
+            ) : !isSap ? (
               <div className="space-y-1.5">
                 <Label>
                   API Key {source.api_key_masked && <span className="text-muted-foreground">(stored: {source.api_key_masked})</span>}
@@ -377,7 +413,8 @@ export default function ConnectorConfigPage({ params }: { params: Promise<{ id: 
                   disabled={!canWrite}
                 />
               </div>
-            )}
+            ) : null}
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
 
             <div className="space-y-1.5">
               <Label>Webhook URL</Label>

@@ -8,12 +8,9 @@ import { isBusinessEmail } from "@/lib/business-email";
 import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const IS_DEV =
-  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_LOGIN === "true";
 
 type Phase = "idle" | "checking" | "redirecting" | "authenticating";
 
@@ -24,7 +21,7 @@ const PHASE_COPY: Record<Exclude<Phase, "idle">, string> = {
 };
 
 function LoginForm() {
-  const { continueWithEmail, devLogin, user, currentOrganization, loading } = useAuth();
+  const { continueWithEmail, user, currentOrganization, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isSignup = searchParams.get("signup") === "1";
@@ -34,8 +31,6 @@ function LoginForm() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [email, setEmail] = useState("");
   const [remember, setRemember] = useState(true);
-  const [devEmail, setDevEmail] = useState("");
-  const [fullName, setFullName] = useState("");
 
   useEffect(() => {
     if (loading || !user) return;
@@ -57,18 +52,6 @@ function LoginForm() {
       setPhase("redirecting");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
-      setPhase("idle");
-    }
-  }
-
-  async function handleDevLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setPhase("authenticating");
-    try {
-      await devLogin(devEmail, fullName || devEmail.split("@")[0] || "Dev User");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Dev login failed");
       setPhase("idle");
     }
   }
@@ -184,36 +167,7 @@ function LoginForm() {
             </Link>
           </p>
 
-          {IS_DEV && (
-            <Card className="space-y-3 border-dashed p-4">
-              <p className="text-xs font-medium text-muted-foreground">Local development only</p>
-              <form onSubmit={handleDevLogin} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="dev-email">Email</Label>
-                  <Input
-                    id="dev-email"
-                    type="email"
-                    value={devEmail}
-                    onChange={(e) => setDevEmail(e.target.value)}
-                    placeholder="demo@supply.local"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="dev-name">Full name</Label>
-                  <Input
-                    id="dev-name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Alex Operator"
-                  />
-                </div>
-                <Button type="submit" className="w-full" variant="secondary" disabled={busy}>
-                  Dev sign-in
-                </Button>
-              </form>
-            </Card>
-          )}
+
         </div>
       </div>
     </div>

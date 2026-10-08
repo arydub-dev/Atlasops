@@ -30,6 +30,7 @@ SECRET_KEYS = frozenset(
         "private_key",
         "secret",
         "username",
+        "company_db",
     }
 )
 

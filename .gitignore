@@ -67,3 +67,6 @@ Thumbs.db
 .run/
 backend/.bootstrap/
 backend/.uvpython/
+
+# Private operator runbooks (never commit credentials or demo account details)
+.local/

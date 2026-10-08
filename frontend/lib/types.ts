@@ -144,7 +144,7 @@ export interface InventoryItem {
   safety_stock: number;
   max_stock: number;
   avg_daily_demand: number;
-  days_of_supply: number;
+  days_of_supply: number | null;
   status: "ok" | "low_stock" | "overstock" | "stockout";
   reorder_recommendation: number;
 }
@@ -492,6 +492,7 @@ export interface AIOrchestrateResponse {
 // ---- Data Sources / Connected Mode ----
 export type ConnectorType =
   | "sap_erp"
+  | "sap_business_one"
   | "oracle_erp"
   | "salesforce_crm"
   | "salesforce"
@@ -609,6 +610,7 @@ export interface ImportPreview {
 }
 
 export interface ImportResult {
+  outcomes?: { created: number; updated: number; unchanged: number };
   job_id: string;
   entity: string;
   status: ImportStatus;

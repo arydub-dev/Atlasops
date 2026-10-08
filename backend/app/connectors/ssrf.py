@@ -101,6 +101,14 @@ def assert_safe_connector_url(
 
     _reject_private_ip(host)
 
+    if connector_type == ConnectorType.SAP_BUSINESS_ONE:
+        from app.core.config import get_settings
+        origins = {x.strip().rstrip("/") for x in get_settings().SAP_BUSINESS_ONE_ALLOWED_ORIGINS.split(",") if x.strip()}
+        origin = f"https://{parsed.netloc}"
+        if origin not in origins:
+            raise SSRFError("SAP origin must be approved by the platform operator before connecting")
+        return raw
+
     patterns = _ALLOWLIST.get(connector_type)
     if not patterns:
         raise SSRFError(f"No URL allowlist configured for {connector_type.value}")

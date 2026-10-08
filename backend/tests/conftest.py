@@ -53,12 +53,20 @@ def _db_schema():
 
 
 @pytest.fixture(autouse=True)
-def _clean_tables():
+def _clean_tables(monkeypatch):
     """Wipe rows between tests so unique emails/slugs do not collide."""
     from app.core.rate_limit import reset_rate_limiter
 
     # Shared TestClient IP would otherwise trip in-memory rate limits mid-suite.
     reset_rate_limiter()
+    # Each test has its own clients. Isolate their Redis counters just as the
+    # in-memory counters are reset; preserve limits and expiry enforcement.
+    from app.core import rate_limit
+    original_check = rate_limit._check
+    namespace = uuid4().hex
+    def isolated_check(key, *args, **kwargs):
+        return original_check(f"test:{namespace}:{key}", *args, **kwargs)
+    monkeypatch.setattr(rate_limit, "_check", isolated_check)
     yield
     session = SessionLocal()
     try:

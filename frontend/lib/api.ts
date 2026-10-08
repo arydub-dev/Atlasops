@@ -46,6 +46,7 @@ function orgHeaders(): Record<string, string> {
 function shouldRedirectOn401(): boolean {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname;
+  if (path === "/demo-login") return false;
   // Stay put on public / auth / onboarding surfaces — /auth/me 401 is expected there.
   if (
     path === "/" ||

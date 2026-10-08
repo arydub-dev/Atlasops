@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # --- App ---
     APP_NAME: str = "ATLASOPS"
     LEAD_CAPTURE_ENABLED: bool = False
+    DEMO_WORKSPACE_ID: str = ""  # Exact operator-approved fictional tenant; reset disabled by default
+    SAP_BUSINESS_ONE_ALLOWED_ORIGINS: str = ""  # Operator-approved HTTPS origins, comma-separated
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"
@@ -47,6 +49,11 @@ class Settings(BaseSettings):
 
     # --- WorkOS ---
     WORKOS_API_KEY: str = ""
+    # Optional restricted demo credentials. Never expose these as NEXT_PUBLIC values.
+    DEMO_LOGIN_ID: str = ""
+    DEMO_LOGIN_PASSWORD_HASH: str = ""
+    DEMO_LOGIN_USER_ID: str = ""
+    DEMO_LOGIN_ORG_ID: str = ""
     WORKOS_CLIENT_ID: str = ""
     WORKOS_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/callback"
     WORKOS_COOKIE_PASSWORD: str = "change-me-workos-cookie-password-32ch"

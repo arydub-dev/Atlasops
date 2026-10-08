@@ -4,9 +4,9 @@ from __future__ import annotations
 from app.models import Inventory
 
 
-def days_of_supply(quantity: int, avg_daily_demand: float) -> float:
+def days_of_supply(quantity: int, avg_daily_demand: float) -> float | None:
     if avg_daily_demand <= 0:
-        return 999.0
+        return None
     return round(quantity / avg_daily_demand, 1)
 
 
