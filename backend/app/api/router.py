@@ -56,3 +56,5 @@ api_router.include_router(analytics.router)
 api_router.include_router(network.router)
 api_router.include_router(data.router)
 api_router.include_router(ai.router)
+from app.api.routers import priorities
+api_router.include_router(priorities.router)

@@ -98,3 +98,39 @@ def resolve_incident(
     detail = incident_service.incident_detail(db, ctx.organization_id, incident_id)
     assert detail is not None
     return detail
+
+
+class IncidentProgress(BaseModel):
+    status: IncidentStatus | None = None
+    assign_to_me: bool = False
+    note: str = Field(default="", max_length=4000)
+
+
+@router.patch("/{incident_id}")
+def update_progress(incident_id: UUID, payload: IncidentProgress,
+                    db: Session = Depends(get_db_with_tenant),
+                    ctx: TenantContext = Depends(require_permission("alerts.resolve"))) -> dict:
+    inc = db.scalar(select(Incident).where(Incident.id==incident_id,
+        Incident.organization_id==ctx.organization_id).with_for_update())
+    if inc is None:
+        raise HTTPException(status_code=404,detail="Incident not found")
+    if inc.status in {IncidentStatus.RESOLVED,IncidentStatus.CLOSED}:
+        raise HTTPException(status_code=409,detail="Resolved incidents cannot be changed through progress updates")
+    if payload.status is not None:
+        allowed = {IncidentStatus.OPEN:{IncidentStatus.INVESTIGATING},
+            IncidentStatus.INVESTIGATING:{IncidentStatus.MITIGATING},IncidentStatus.MITIGATING:set()}
+        if payload.status != inc.status and payload.status not in allowed.get(inc.status,set()):
+            raise HTTPException(status_code=409,detail="Use the next progress step or resolve the incident with a resolution")
+        inc.status = payload.status
+    if payload.assign_to_me:
+        inc.owner_user_id = ctx.user_id
+    from app.services.audit import write_audit
+    write_audit(db,organization_id=ctx.organization_id,user_id=ctx.user_id,
+        action="incident_progress",resource="incident",resource_id=str(inc.id),detail=inc.status.value)
+    from app.services.timeline import record_event
+    record_event(db, organization_id=ctx.organization_id, title=f"Incident progress: {inc.status.value}",
+        event_type="alert", entity_type="incident", entity_id=inc.id, severity="info",
+        message=payload.note.strip() or None,
+        payload={"status":inc.status.value,"owner_user_id":str(inc.owner_user_id) if inc.owner_user_id else None})
+    db.commit()
+    return incident_service.incident_detail(db,ctx.organization_id,inc.id)

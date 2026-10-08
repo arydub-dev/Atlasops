@@ -7,12 +7,12 @@ feature works fully offline for demos and CI.
 """
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Alert, RiskAssessment, Supplier, Warehouse
-from app.models.enums import AlertStatus, RiskLevel
+from app.models import Alert, RiskAssessment, Supplier, Warehouse, Inventory, Product, Shipment
+from app.models.enums import AlertStatus, RiskLevel, ShipmentStatus
 from app.services import ingestion, metrics, risk_engine
 
 
@@ -96,8 +96,46 @@ def build_context(db: Session) -> dict:
             for a in open_alerts
         ]
 
+    if "inventory.read" in perms and "warehouses.read" in perms:
+        from app.services.inventory_logic import days_of_supply, reorder_recommendation
+        positions = db.execute(select(Inventory, Product, Warehouse)
+            .join(Product, Product.id == Inventory.product_id)
+            .join(Warehouse, Warehouse.id == Inventory.warehouse_id)
+            .where(Inventory.organization_id == org_id, Product.organization_id == org_id,
+                   Warehouse.organization_id == org_id, Inventory.is_current.is_(True),
+                   Inventory.quantity <= Inventory.reorder_point)
+            .order_by(case((Inventory.avg_daily_demand > 0, Inventory.quantity * 1.0 / Inventory.avg_daily_demand), else_=1e12), Product.sku).limit(20)).all()
+        shipments = []
+        if "shipments.read" in perms and positions:
+            shipments = db.scalars(select(Shipment).where(Shipment.organization_id == org_id,
+                Shipment.product_id.in_([p.id for _, p, _ in positions]),
+                Shipment.status.in_([ShipmentStatus.DELAYED, ShipmentStatus.IN_TRANSIT, ShipmentStatus.CUSTOMS_HOLD]))
+                .order_by(Shipment.eta).limit(50)).all()
+        supplier_names = {}
+        if "suppliers.read" in perms and shipments:
+            supplier_names = {s.id: s.name for s in db.scalars(select(Supplier).where(
+                Supplier.organization_id == org_id, Supplier.id.in_([ship.supplier_id for ship in shipments if ship.supplier_id]))) }
+        ctx["inventory_priorities"] = [{
+            "sku": product.sku, "product": product.name, "warehouse": warehouse.name,
+            "quantity": inv.quantity, "reorder_point": inv.reorder_point,
+            "avg_daily_demand": inv.avg_daily_demand, "days_of_supply": days_of_supply(inv.quantity, inv.avg_daily_demand),
+            "recommended_replenishment": reorder_recommendation(inv),
+            "snapshot_at": inv.snapshot_date.isoformat() if inv.snapshot_date else None,
+            "linked_shipments": [{"reference": ship.reference, "status": ship.status.value,
+                "supplier": supplier_names.get(ship.supplier_id),
+                "units": ship.units, "delay_days": ship.delay_days, "eta": ship.eta.isoformat()}
+                for ship in shipments if ship.product_id == product.id and ship.warehouse_id == warehouse.id],
+        } for inv, product, warehouse in positions]
+        ctx["inventory_method"] = "Current stock versus configured thresholds; reservations and incoming units are not deducted from suggested replenishment. Shipment links show association, not proven causation."
+
     if "connectors.read" in perms:
         ctx["data_sources"] = _safe_data_context(db)
+
+    if {'inventory.read','warehouses.read','shipments.read','suppliers.read','alerts.read'}.issubset(perms):
+        from app.services.priorities import operational_priorities
+        priorities = operational_priorities(db,org_id)
+        ctx['operational_priorities'] = [{key:item[key] for key in ('title','severity','explanation','recommendation','method')} for item in priorities['items'][:10]]
+        ctx['priority_ranking'] = priorities['ranking']
 
     return ctx
 
@@ -199,6 +237,17 @@ def _answer_locally(prompt: str, context: dict) -> str:
         return _data_sources_answer(context)
     if any(k in p for k in ("delay", "late", "increasing this week")):
         return _delay_answer(context)
+    matching = [row for row in context.get("inventory_priorities", []) if row['sku'].lower() in p or row['warehouse'].lower() in p]
+    if matching:
+        return _inventory_answer({**context, 'inventory_priorities':matching})
+    if context.get('operational_priorities') and any(k in p for k in ('urgent','address first','what should','operational issues','priorities','problems right now')):
+        lines=['Recorded operational priorities',context['priority_ranking']]
+        for item in context['operational_priorities']:
+            lines.extend([f"- {item['severity']}: {item['title']}",f"  Evidence: {item['explanation']}",f"  Recommendation: {item['recommendation']}"])
+        lines.append('These are recommendations. No supplier has been contacted, no order placed, and no stock changed.')
+        return '\n'.join(lines)
+    if context.get("inventory_priorities") and any(k in p for k in ("warehouse", "stockout", "inventory", "replenish", "urgent", "what should", "operational issues")):
+        return _inventory_answer(context)
     if any(k in p for k in ("warehouse", "stockout", "inventory")):
         return _inventory_answer(context)
     if any(k in p for k in ("supplier", "vendor")):
@@ -299,6 +348,18 @@ def _delay_answer(context: dict) -> str:
 
 
 def _inventory_answer(context: dict) -> str:
+    positions = context.get("inventory_priorities")
+    if positions:
+        lines = ["Recorded inventory below reorder thresholds (up to 20 positions):"]
+        for row in positions:
+            coverage = f"{row['days_of_supply']:g} days" if row['days_of_supply'] is not None else "unknown"
+            lines.append(f"- {row['product']} ({row['sku']}) at {row['warehouse']}: {row['quantity']} units; reorder threshold {row['reorder_point']}; average daily demand {row['avg_daily_demand']}; stock coverage {coverage}; suggested replenishment {row['recommended_replenishment']} units.")
+            for shipment in row['linked_shipments']:
+                supplier = f"; supplier {shipment['supplier']}" if shipment.get('supplier') else ""
+                lines.append(f"  Linked shipment {shipment['reference']}: {shipment['status']}, {shipment['units']} units, recorded delay {shipment['delay_days']} days; ETA {shipment['eta']}{supplier}.")
+        lines.append(context.get('inventory_method', ''))
+        lines.append("Next: confirm demand and supplier delivery dates, then track the approved response in an incident. No order has been placed and no inventory has been changed.")
+        return "\n".join(lines)
     whs = context.get("high_utilization_warehouses") or []
     if not whs:
         return "Warehouse risk analysis requires warehouses.read permission."

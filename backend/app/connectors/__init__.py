@@ -14,7 +14,7 @@ __all__ = [
 
 def _autoload() -> None:
     # Register built-in connectors on import.
-    from app.connectors import dynamics_bc, salesforce, ups  # noqa: F401
+    from app.connectors import dynamics_bc, salesforce, sap_business_one, ups  # noqa: F401
 
 
 _autoload()

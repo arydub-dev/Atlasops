@@ -47,8 +47,15 @@ echo "  ensuring schema (Alembic)…"
 DATABASE_URL="$DB_URL" "$PY" -m app.cli ensure-schema
 
 echo "  ensuring sandbox seed…"
-DATABASE_URL="$DB_URL" "$PY" -m app.cli seed-sandbox \
-  --email "demo@example.com" --org "Demo Manufacturing Co" || true
+if [ ! -f "$ROOT/.local/private-demo-env.json" ]; then
+  DATABASE_URL="$DB_URL" "$PY" -m app.cli seed-sandbox \
+    --email "demo@example.com" --org "Demo Manufacturing Co" || true
+fi
+
+BACKEND_COMMAND=("$PY" -m uvicorn app.main:app --host 127.0.0.1 --port 8000)
+if [ -f "$ROOT/.local/private-demo-env.json" ]; then
+  BACKEND_COMMAND=("$PY" "$ROOT/.local/run_private_demo.py")
+fi
 
 DATABASE_URL="$DB_URL" \
   ENVIRONMENT=development \
@@ -57,7 +64,7 @@ DATABASE_URL="$DB_URL" \
   SEED_ON_STARTUP=false \
   CONNECTOR_SYNC_INLINE=true \
   ALLOW_CREATE_ALL_ON_STARTUP=false \
-  nohup "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+  nohup "${BACKEND_COMMAND[@]}" \
   > "$RUN_DIR/backend.log" 2>&1 &
 echo $! > "$RUN_DIR/backend.pid"
 
@@ -87,8 +94,12 @@ for i in $(seq 1 60); do
     echo "  Frontend : $FRONTEND_URL"
     echo
     echo "  Open $FRONTEND_URL/login"
-    echo "  Local auth: Dev login (NEXT_PUBLIC_DEV_LOGIN=true)"
-    echo "  Use demo@example.com — WorkOS not required in development."
+    if [ -f "$ROOT/.local/private-demo-env.json" ]; then
+      echo "  Private demo: $FRONTEND_URL/demo-login"
+      echo "  Credentials: .local/DEMO_ACCESS.txt (keep private)"
+    else
+      echo "  Sign in using the configured identity provider."
+    fi
     echo "  Connector sync runs inline (Redis optional). For workers:"
     echo "    docker compose up redis worker -d"
     echo

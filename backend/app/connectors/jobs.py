@@ -318,7 +318,7 @@ async def sync_connection(
         connector = create_connector(
             connection.connector_type,
             organization_id=org_id,
-            config=connection.config or {},
+            config={**(connection.config or {}), "_connection_id": str(connection.id)},
             credentials=credentials,
             cursor=connection.cursor,
         )
@@ -336,17 +336,15 @@ async def sync_connection(
         # Do not advance the incremental cursor unless the fetch finished.
         if result.cursor is not None:
             connection.cursor = result.cursor
-        connection.record_count = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Supplier)
-                .where(
-                    Supplier.organization_id == org_id,
-                    Supplier.external_id.isnot(None),
-                )
+        if "sync_entities" in (connection.config or {}):
+            # Mapped adapters perform a complete bounded refresh of this connection.
+            connection.record_count = result.records_imported
+        else:
+            connection.record_count = int(
+                db.scalar(select(func.count()).select_from(Supplier).where(
+                    Supplier.organization_id == org_id, Supplier.external_id.isnot(None)
+                )) or 0
             )
-            or 0
-        )
         connection.last_sync_at = _utcnow()
         connection.status = ConnectorStatus.CONNECTED
         connection.health = (

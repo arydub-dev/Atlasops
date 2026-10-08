@@ -35,8 +35,8 @@ def catalogue() -> list[dict[str, Any]]:
                 "display_name": entry.get("display_name") or ctype,
                 "class_name": entry.get("class") or getattr(cls, "__name__", ctype),
                 "auth_methods": list(auth),
-                "supports_incremental": True,
-                "supports_webhooks": True,
+                "supports_incremental": bool(getattr(cls, "supports_incremental", True)),
+                "supports_webhooks": False,
                 "supports_field_mapping": True,
                 "version": version,
                 "capabilities": [

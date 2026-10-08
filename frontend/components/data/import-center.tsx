@@ -37,6 +37,7 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
   const { data: history, refetch: refetchHistory } = useFetch<ImportJob[]>("/data/imports");
 
   const [entity, setEntity] = useState("suppliers");
+  const [importMode, setImportMode] = useState("create");
   const [file, setFile] = useState<File | null>(null);
   const [sheet, setSheet] = useState<string | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -98,6 +99,7 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
 
   function changeEntity(ent: string) {
     setEntity(ent);
+    setImportMode("create");
     setResult(null);
     if (file) runPreview(file, ent, sheet);
   }
@@ -124,6 +126,7 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
       fd.append("file", file);
       fd.append("entity", entity);
       fd.append("mapping", JSON.stringify(cleanMap(mapping)));
+      fd.append("mode", importMode);
       if (sheet) fd.append("sheet", sheet);
       const res = await api.upload<ImportResult>("/data/import/commit", fd);
       setResult(res);
@@ -294,6 +297,19 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
                 </table>
               </div>
 
+              {canWrite && (entity === "products" || entity === "shipments") && (
+                <div className="space-y-2">
+                  <Label>Import action</Label>
+                  <Select value={importMode} onValueChange={setImportMode} disabled={busy}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="create">Create new records</SelectItem>
+                      <SelectItem value="update">Update existing records by SKU/reference</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {importMode === "update" && <p className="text-sm text-muted-foreground">Matching records will change. Blank optional cells preserve saved values. Unknown keys and connector-managed records are rejected.</p>}
+                </div>
+              )}
               {canWrite && (
                 <div className="flex items-center gap-2">
                   <Button onClick={commit} disabled={busy || preview.validation.valid === 0}>
@@ -319,15 +335,17 @@ export function ImportCenter({ excel = false }: { excel?: boolean }) {
                   ? <TriangleAlert className="h-5 w-5 text-destructive" />
                   : <CheckCircle2 className="h-5 w-5 text-success" />}
                 <p className="font-medium">
-                  Import {result.status} — {formatNumber(result.rows_imported)} imported,{" "}
+                  Import {result.status} — {formatNumber(result.rows_imported)} accepted,{" "}
                   {formatNumber(result.rows_rejected)} rejected
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <Stat label="Processed" value={formatNumber(result.rows_processed)} />
-                <Stat label="Imported" value={formatNumber(result.rows_imported)} tone="text-success" />
+                <Stat label="Accepted" value={formatNumber(result.rows_imported)} tone="text-success" />
                 <Stat label="Rejected" value={formatNumber(result.rows_rejected)} tone="text-destructive" />
               </div>
+              {result.outcomes && <p className="text-sm">Created: {result.outcomes.created} · Updated: {result.outcomes.updated} · Unchanged: {result.outcomes.unchanged}</p>}
+              {result.errors.length > 0 && <ul className="space-y-1 text-sm" aria-label="Rejected import rows">{result.errors.map((error, index) => <li key={index}>Row {error.row}: {error.errors.join("; ")}</li>)}</ul>}
               <Button variant="outline" size="sm" onClick={reset}>Import another file</Button>
             </CardContent>
           </Card>

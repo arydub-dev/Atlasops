@@ -110,6 +110,7 @@ class SimulationType(str, enum.Enum):
 class ConnectorType(str, enum.Enum):
     DYNAMICS_BC = "dynamics_bc"
     SALESFORCE = "salesforce"
+    SAP_BUSINESS_ONE = "sap_business_one"
     UPS = "ups"
     CSV_UPLOAD = "csv_upload"
     EXCEL_UPLOAD = "excel_upload"
