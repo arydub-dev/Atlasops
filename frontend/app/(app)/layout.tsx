@@ -8,17 +8,29 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { LoadingState } from "@/components/shared/states";
 import { useDemoMode } from "@/lib/demo-mode";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const DEMO_SANDBOX = process.env.NEXT_PUBLIC_DEMO_SANDBOX === "true";
 
 function DemoBanner() {
   const { enabled } = useDemoMode();
-  if (!DEMO_SANDBOX || !enabled) return null;
+  const { currentOrganization, currentMembership } = useAuth();
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const seededDemo = currentOrganization?.settings?.demo_dataset === "atlas-manufacturing-v1";
+  if (!seededDemo && (!DEMO_SANDBOX || !enabled)) return null;
   return (
     <div className="no-print flex items-center justify-center gap-2 border-b border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary">
       <Sparkles className="h-3.5 w-3.5" />
-      Demo Mode active — alerts, disruptions and AI recommendations are populated for demonstration.
+      Synthetic demo data · Real AtlasOps workflows · SAP and Salesforce are not connected.
+      {seededDemo && ["owner", "admin"].includes(currentMembership?.role_slug ?? "") && <button className="ml-3 underline" disabled={resetting} onClick={async () => {
+        if (!window.confirm("Reset this fictional workspace? Demo operational edits and imports will be removed.")) return;
+        setResetting(true); setResetError("");
+        try { await api.post("/data/demo/reset"); window.location.reload(); }
+        catch (e) { setResetError(e instanceof Error ? e.message : "Reset failed"); setResetting(false); }
+      }}>{resetting ? "Resetting…" : "Reset demo data"}</button>}
+      {resetError && <span role="alert">{resetError}</span>}
     </div>
   );
 }

@@ -29,12 +29,16 @@ def parse_sync_frequency(freq: str | None) -> timedelta | None:
         return timedelta(hours=1)
     if raw in {"daily", "day"}:
         return timedelta(days=1)
-    if raw in {"15m", "every_15m"}:
+    if raw in {"weekly", "week"}:
+        return timedelta(days=7)
+    if raw in {"15m", "every_15m", "every 15 min"}:
         return timedelta(minutes=15)
     match = _FREQ_RE.match(raw)
     if not match:
         return None
     n = int(match.group(1))
+    if n <= 0 or n > 365:
+        return None
     unit = match.group(2).lower()
     if unit == "m":
         return timedelta(minutes=n)
@@ -96,6 +100,8 @@ async def enqueue_due_connector_syncs(ctx: dict | None = None) -> dict:
                 set_session_org(db, org.id)
                 recover_stale_syncing_connections(db, org.id, now=now)
                 for conn in _due_connections(db, org.id, now):
+                    if parse_sync_frequency(conn.sync_frequency) is None:
+                        continue  # Manual or invalid schedules must not become every-tick jobs.
                     try:
                         await enqueue_sync_connection(
                             connection_id=conn.id,

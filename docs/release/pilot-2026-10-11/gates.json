@@ -1,0 +1,65 @@
+{
+  "assessed_at_utc": "2026-10-11T10:32:19.566477+00:00",
+  "overall": "FAIL",
+  "release": "NOT READY",
+  "hosted_execution": false,
+  "staging_url": null,
+  "public_url_not_verified_as_staging": "https://www.atlasops.online/",
+  "deployed_revision": null,
+  "build_id": null,
+  "synthetic_organization_ids": [],
+  "checks": [
+    {
+      "id": "HOST-001",
+      "status": "BLOCKED",
+      "owner_role": "Release engineer / hosting administrator",
+      "assigned_person": null,
+      "test_executed_at_utc": null,
+      "authorization_reference": null,
+      "missing_prerequisite": "Verified staging project, URL/build/revisions, separate DB/Redis, synthetic orgs and controlled accounts",
+      "procedure": "ACCEPTANCE.md",
+      "evidence_paths": []
+    },
+    {
+      "id": "SSO-001",
+      "status": "BLOCKED",
+      "owner_role": "Identity administrator / security QA",
+      "assigned_person": null,
+      "test_executed_at_utc": null,
+      "authorization_reference": null,
+      "missing_prerequisite": "WorkOS staging configuration, controlled invitation inboxes, identity admin access and test authorization",
+      "procedure": "ACCEPTANCE.md",
+      "evidence_paths": []
+    },
+    {
+      "id": "AI-LIVE-001",
+      "status": "BLOCKED",
+      "owner_role": "AI service owner / security reviewer",
+      "assigned_person": null,
+      "test_executed_at_utc": null,
+      "authorization_reference": null,
+      "missing_prerequisite": "Secure staging provider/model/project, synthetic-test budget, two tenants and provider execution telemetry",
+      "procedure": "ACCEPTANCE.md",
+      "evidence_paths": []
+    },
+    {
+      "id": "VISUAL-REVIEW-001",
+      "status": "BLOCKED",
+      "owner_role": "Human product reviewer / pilot sponsor",
+      "assigned_person": null,
+      "test_executed_at_utc": null,
+      "authorization_reference": null,
+      "missing_prerequisite": "Exact hosted revision, named reviewer and explicit approval",
+      "procedure": "ACCEPTANCE.md",
+      "evidence_paths": []
+    }
+  ],
+  "main_push_authorized": true,
+  "main_push_completed": false,
+  "authentication_status": "BLOCKED: existing local GitHub CLI credential invalid",
+  "notes": [
+    "User explicitly requested main push after Vercel auto-deployment consequence was explained. No separate deployment command.",
+    "No customer data or public-site fault tests.",
+    "Local PASS results do not satisfy hosted gates."
+  ]
+}

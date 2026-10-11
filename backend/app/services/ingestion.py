@@ -45,6 +45,13 @@ def _utcnow() -> datetime:
 # --------------------------------------------------------------------------- #
 INTEGRATION_TEMPLATES: list[dict] = [
     {
+        "type": ConnectorType.SAP_BUSINESS_ONE.value,
+        "name": "SAP Business One",
+        "category": "ERP",
+        "description": "Read-only Service Layer pilot: mapped suppliers, products and order headers. Sandbox validation required.",
+        "auth_methods": ["Service Layer Session"],
+    },
+    {
         "type": ConnectorType.DYNAMICS_BC.value,
         "name": "Microsoft Dynamics 365 Business Central",
         "category": "ERP",
@@ -55,7 +62,7 @@ INTEGRATION_TEMPLATES: list[dict] = [
         "type": ConnectorType.SALESFORCE.value,
         "name": "Salesforce",
         "category": "CRM",
-        "description": "Pull demand signals, accounts and order pipeline from Salesforce.",
+        "description": "Explicitly map supplier accounts, products and order headers. Sandbox validation required.",
         "auth_methods": ["OAuth2", "API Key"],
     },
     {
@@ -134,6 +141,10 @@ ENTITY_SPECS: dict[str, dict] = {
         "label": "Shipments",
         "fields": [
             {"name": "reference", "label": "Reference", "required": True, "type": "str", "unique": True},
+            {"name": "product_sku", "label": "Product SKU", "required": False, "type": "str"},
+            {"name": "warehouse_name", "label": "Destination Warehouse Name", "required": False, "type": "str"},
+            {"name": "supplier_name", "label": "Supplier Name", "required": False, "type": "str"},
+            {"name": "eta", "label": "ETA (ISO date/time)", "required": False, "type": "datetime"},
             {"name": "origin", "label": "Origin", "required": True, "type": "str"},
             {"name": "destination", "label": "Destination", "required": True, "type": "str"},
             {"name": "carrier", "label": "Carrier", "required": True, "type": "str"},
@@ -296,7 +307,8 @@ def _coerce(value, ftype: str):
             raise ValueError("expected a finite number")
         return number
     if ftype == "datetime":
-        return datetime.fromisoformat(s)
+        value = datetime.fromisoformat(s)
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
     if ftype.startswith("enum:"):
         return ShipmentStatus(s.lower()).value
     return s
@@ -371,33 +383,28 @@ def commit_import(
     source_name: str,
     source_type: str,
     user_id: UUID | None = None,
+    mode: str = "create",
 ) -> dict:
+    if mode not in {"create", "update"} or (mode == "update" and entity not in {"products", "shipments"}):
+        raise ValueError("Update mode supports products and shipments only")
     spec = entity_spec(entity)
     started = _utcnow()
     imported = 0
     rejected = 0
     errors: list[dict] = []
 
-    wh_by_name = (
-        {
-            w.name.lower(): w
-            for w in db.scalars(
-                select(Warehouse).where(Warehouse.organization_id == organization_id)
-            ).all()
-        }
-        if entity == "inventory"
-        else {}
-    )
-    prod_by_sku = (
-        {
-            p.sku.lower(): p
-            for p in db.scalars(
-                select(Product).where(Product.organization_id == organization_id)
-            ).all()
-        }
-        if entity == "inventory"
-        else {}
-    )
+    outcomes = {"created": 0, "updated": 0, "unchanged": 0}
+
+    def unambiguous_index(model, field):
+        index = {}
+        for item in db.scalars(select(model).where(model.organization_id == organization_id)).all():
+            key = str(getattr(item, field)).strip().casefold()
+            index[key] = item if key not in index else None
+        return index
+
+    wh_by_name = unambiguous_index(Warehouse, "name") if entity in {"inventory","shipments"} else {}
+    prod_by_sku = unambiguous_index(Product, "sku") if entity in {"inventory","shipments"} else {}
+    supplier_by_name = unambiguous_index(Supplier, "name") if entity == "shipments" else {}
 
     for idx, raw in enumerate(rows):
         norm, row_errors = _transform_row(spec, raw, mapping)
@@ -407,11 +414,71 @@ def commit_import(
                 errors.append({"row": idx + 1, "errors": row_errors})
             continue
         try:
+            if entity == "shipments":
+                for field,target,index in [('product_sku','product_id',prod_by_sku),('warehouse_name','warehouse_id',wh_by_name),('supplier_name','supplier_id',supplier_by_name)]:
+                    if field in norm:
+                        record=index.get(norm.pop(field).strip().casefold())
+                        if record is None: raise ValueError(f"{field}: no unique match in this organization")
+                        norm[target]=record.id
             obj = _build_entity(entity, norm, wh_by_name, prod_by_sku, organization_id)
+            outcome = "created"
             with db.begin_nested():
+                if mode == "update":
+                    model, key = (Product, "sku") if entity == "products" else (Shipment, "reference")
+                    existing = db.scalar(select(model).where(
+                        model.organization_id == organization_id,
+                        getattr(model, key) == getattr(obj, key),
+                    ).with_for_update())
+                    if existing is None:
+                        raise ValueError("No existing record matches this SKU/reference")
+                    if existing.external_id:
+                        raise ValueError("Connector-managed records must be updated at their source")
+                    # Unmapped or blank optional cells preserve existing values,
+                    # including shipment timestamps and tracking history.
+                    outcome = "unchanged"
+                    for field, column in mapping.items():
+                        if column and raw.get(column) is not None and str(raw[column]).strip():
+                            if entity == "shipments":
+                                field={'product_sku':'product_id','warehouse_name':'warehouse_id','supplier_name':'supplier_id'}.get(field,field)
+                            if getattr(existing, field) != getattr(obj, field):
+                                outcome = "updated"
+                            setattr(existing, field, getattr(obj, field))
+                    obj = existing
+                if entity == "inventory":
+                    # Serialize file imports for this warehouse before resolving a
+                    # current position; two uploads must not create two positions.
+                    db.scalar(select(Warehouse).where(
+                        Warehouse.id == obj.warehouse_id,
+                        Warehouse.organization_id == organization_id,
+                    ).with_for_update())
+                    current = db.scalars(select(Inventory).where(
+                        Inventory.organization_id == organization_id,
+                        Inventory.warehouse_id == obj.warehouse_id,
+                        Inventory.product_id == obj.product_id,
+                        Inventory.is_current.is_(True),
+                    ).with_for_update()).all()
+                    if len(current) > 1:
+                        raise ValueError("Multiple current inventory positions exist; reconcile them before importing")
+                    if current:
+                        existing = current[0]
+                        outcome = "unchanged"
+                        for field in ("quantity", "reorder_point", "safety_stock", "max_stock", "avg_daily_demand"):
+                            if getattr(existing, field) != getattr(obj, field):
+                                outcome = "updated"
+                            setattr(existing, field, getattr(obj, field))
+                        existing.snapshot_date = _utcnow()
+                        obj = existing
                 db.add(obj)
                 db.flush()
+                if entity == "inventory":
+                    warehouse = wh_by_name[str(raw[mapping["warehouse_name"]]).strip().casefold()]
+                    warehouse.current_inventory = db.scalar(select(func.coalesce(func.sum(Inventory.quantity), 0)).where(
+                        Inventory.organization_id == organization_id,
+                        Inventory.warehouse_id == obj.warehouse_id,
+                        Inventory.is_current.is_(True),
+                    ))
             imported += 1
+            outcomes[outcome] += 1
         except (ValueError, IntegrityError) as exc:
             rejected += 1
             if len(errors) < 50:
@@ -431,7 +498,7 @@ def commit_import(
         source_type=source_type,
         entity_type=entity,
         status=status,
-        mapping=mapping,
+        mapping={**mapping, "_import_mode": mode, "_outcomes": outcomes},
         rows_processed=len(rows),
         rows_imported=imported,
         rows_rejected=rejected,
@@ -440,11 +507,13 @@ def commit_import(
         user_id=user_id,
     )
     db.add(job)
-    db.commit()
-    db.refresh(job)
+    # Caller commits import data, outcome record and audit event atomically.
+    db.flush()
 
     return {
         "job_id": str(job.id),
+        "mode": mode,
+        "outcomes": outcomes,
         "entity": entity,
         "status": status.value,
         "rows_processed": len(rows),
@@ -475,21 +544,22 @@ def _build_entity(
         except ValueError:
             status_enum = ShipmentStatus.IN_TRANSIT
         now = _utcnow()
+        eta = norm.pop("eta", now + timedelta(days=14))
         return Shipment(
             organization_id=organization_id,
             **norm,
             status=status_enum,
             current_location=norm.get("origin", ""),
             shipped_at=now,
-            eta=now + timedelta(days=14),
+            eta=eta,
         )
     if entity == "inventory":
-        wh = wh_by_name.get(str(norm.pop("warehouse_name", "")).lower())
-        prod = prod_by_sku.get(str(norm.pop("product_sku", "")).lower())
+        wh = wh_by_name.get(str(norm.pop("warehouse_name", "")).strip().casefold())
+        prod = prod_by_sku.get(str(norm.pop("product_sku", "")).strip().casefold())
         if not wh:
-            raise ValueError("warehouse not found")
+            raise ValueError("Warehouse not found or name is ambiguous")
         if not prod:
-            raise ValueError("product SKU not found")
+            raise ValueError("Product SKU not found or SKU is ambiguous")
         return Inventory(
             organization_id=organization_id,
             warehouse_id=wh.id,

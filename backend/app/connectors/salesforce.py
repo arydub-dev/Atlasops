@@ -6,6 +6,7 @@ import logging
 import re
 from typing import Any
 from uuid import uuid4
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -239,6 +240,8 @@ class SalesforceConnector(Connector):
             await self.authenticate()
         url = self._resolve_api_url(path)
         assert_safe_connector_url(url, connector_type=self.connector_type, field="api_url")
+        if urlparse(url).netloc != urlparse(self._instance_url or "").netloc:
+            raise ConnectorError("Salesforce pagination changed instance", retryable=False, failure_class="data_validation_failure")
 
         async def _call(*, refreshed: bool = False) -> httpx.Response:
             headers = {
@@ -307,7 +310,14 @@ class SalesforceConnector(Connector):
         reported ``done`` — callers must not advance the incremental cursor.
         """
         data = await self._request("GET", "/query", params={"q": query})
-        records = list((data or {}).get("records") or [])
+        def page_records(page):
+            if not isinstance(page, dict) or not isinstance(page.get("records"), list) or any(not isinstance(r, dict) for r in page["records"]):
+                raise ConnectorError("Salesforce returned an invalid record page", retryable=False, failure_class="data_validation_failure")
+            if page.get("done") is False and not page.get("nextRecordsUrl"):
+                raise ConnectorError("Salesforce returned an incomplete page without a continuation", retryable=False, failure_class="data_validation_failure")
+            return page["records"]
+
+        records = list(page_records(data))
         pages = 1
         max_pages = self._max_pages()
         max_records = self._max_records()
@@ -321,7 +331,7 @@ class SalesforceConnector(Connector):
                 )
                 return records[:max_records], False
             data = await self._request("GET", data["nextRecordsUrl"])
-            batch = list((data or {}).get("records") or [])
+            batch = list(page_records(data))
             records.extend(batch)
             pages += 1
             if not batch and not (data or {}).get("nextRecordsUrl"):
@@ -370,7 +380,12 @@ class SalesforceConnector(Connector):
         return SchemaDiscovery(entities=entities)
 
     async def sync(self, db: Session, mode: SyncMode = SyncMode.INCREMENTAL) -> SyncResult:
-        """Map Account/Opportunity (or custom object) rows to Supplier records."""
+        """Explicit mapped sync when configured; preserve legacy connections."""
+        if "sync_entities" in self.config:
+            return await self._sync_mapped(db)
+        from app.core.config import get_settings
+        if get_settings().requires_secure_boot:
+            raise ConnectorError("Configure explicit entity mappings before production sync", retryable=False, failure_class="data_validation_failure")
         result = SyncResult()
         await self.authenticate()
 
@@ -503,6 +518,31 @@ class SalesforceConnector(Connector):
             result.cursor = {"system_modstamp": latest_mod, "supplier_object": supplier_object}
         else:
             result.cursor = dict(self.cursor) if self.cursor else None
+        return result.finish()
+
+    async def _sync_mapped(self, db: Session) -> SyncResult:
+        from app.connectors.mapped_sync import apply_records, invalid, validate_mappings
+
+        specs = validate_mappings(self.config)
+        result = SyncResult()
+        await self.authenticate()
+        with db.begin_nested():
+            for spec in specs:
+                fields = {spec["id_field"], *spec["fields"].values(), *spec.get("filter_equals", {}).keys()}
+                def literal(value):
+                    if isinstance(value, bool):
+                        return str(value).lower()
+                    if isinstance(value, int):
+                        return str(value)
+                    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+                filters = spec.get("filter_equals", {})
+                where = " WHERE " + " AND ".join(f"{key} = {literal(value)}" for key, value in filters.items()) if filters else ""
+                query = f"SELECT {', '.join(sorted(fields))} FROM {spec['source']}{where} ORDER BY {spec['id_field']} ASC"
+                records, complete = await self._soql(query)
+                if not complete:
+                    raise invalid("Salesforce mapped sync exceeded pagination limits; no data was committed")
+                apply_records(db, self, spec, records, result)
+        # Full, bounded refresh; deletions and change-data capture are not inferred.
         return result.finish()
 
     async def health(self) -> HealthStatus:

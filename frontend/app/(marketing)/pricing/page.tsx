@@ -114,7 +114,7 @@ export default function PricingPage() {
               >
                 {t.featured && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
-                    Most popular
+                    For growing teams
                   </span>
                 )}
                 <h3 className="text-lg font-semibold text-foreground">

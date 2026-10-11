@@ -1121,6 +1121,8 @@ class AuditLog(Base, TenantOwned):
 # application code because identity flows (list-my-orgs, accept-invite) are
 # cross-tenant by nature.
 TENANT_TABLES: tuple[str, ...] = (
+    "recovery_records",
+    "recovery_cases",
     "custom_roles",
     "api_tokens",
     "webhook_endpoints",

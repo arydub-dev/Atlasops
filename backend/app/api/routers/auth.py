@@ -48,6 +48,43 @@ from app.tenancy.rls import set_session_org
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+from pydantic import BaseModel, Field, SecretStr
+
+
+class DemoLoginRequest(BaseModel):
+    login_id: str = Field(min_length=1, max_length=100)
+    password: SecretStr = Field(min_length=1, max_length=72)
+
+
+@router.post("/demo-login")
+def demo_login(payload: DemoLoginRequest, request: Request, response: Response,
+               db: Session = Depends(get_db), _: None = Depends(rate_limit_auth)):
+    import hmac
+    from app.core.security import verify_password
+    from app.identity.demo_access import allowed, session_label
+    if not all([settings.DEMO_LOGIN_ID, settings.DEMO_LOGIN_PASSWORD_HASH,
+                settings.DEMO_LOGIN_USER_ID, settings.DEMO_LOGIN_ORG_ID]):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        password_ok = verify_password(payload.password.get_secret_value(), settings.DEMO_LOGIN_PASSWORD_HASH)
+        id_ok = hmac.compare_digest(payload.login_id.encode(), settings.DEMO_LOGIN_ID.encode())
+        user_id, org_id = UUID(settings.DEMO_LOGIN_USER_ID), UUID(settings.DEMO_LOGIN_ORG_ID)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid demo credentials")
+    if not password_ok or not id_ok or not allowed(db, user_id, org_id):
+        raise HTTPException(status_code=401, detail="Invalid demo credentials")
+    user = db.get(User, user_id)
+    _, token = create_session(db, user=user, organization_id=org_id,
+        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
+        device_label=session_label())
+    _audit_auth(db, organization_id=org_id, user_id=user_id, action="demo_login",
+        detail="Restricted demo sign-in", request=request)
+    db.commit()
+    _set_session_cookie(response, token)
+    response.headers["Cache-Control"] = "no-store"
+    return {"ok": True}
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -626,7 +663,7 @@ def dev_login(
     _: None = Depends(rate_limit_auth),
 ) -> MeResponse:
     """Local-only auth bypass. Never available outside ENVIRONMENT=development."""
-    if settings.ENVIRONMENT.lower() != "development":
+    if settings.ENVIRONMENT.lower() != "development" or settings.DEMO_LOGIN_PASSWORD_HASH:
         raise HTTPException(status_code=404, detail="Not found")
     if settings.workos_configured:
         raise HTTPException(status_code=404, detail="Not found")
@@ -698,4 +735,3 @@ def dev_login(
         current_organization=OrganizationOut.model_validate(org) if org else None,
         current_membership=_membership_out(m, org) if m and org else None,
     )
-

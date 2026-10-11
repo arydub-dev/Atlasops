@@ -62,15 +62,20 @@ def validate_settings(settings: Settings, *, role: str = "api") -> list[str]:
     if not settings.REDIS_URL:
         problems.append(f"REDIS_URL is required in {env_label}")
     else:
-        redis_url = settings.REDIS_URL.lower()
-        # Require credentials in production always; in other hardened envs when not local.
-        has_auth = "@" in redis_url.replace("redis://", "").replace("rediss://", "")
-        is_local = "localhost" in redis_url or "127.0.0.1" in redis_url
-        if not has_auth and (settings.is_production or not is_local):
-            problems.append(
-                f"REDIS_URL must include authentication credentials in {env_label} "
-                "(e.g. rediss://:password@host:6379/0)"
-            )
+        try:
+            redis_url = urlsplit(settings.REDIS_URL)
+            local = redis_url.hostname in {"localhost", "127.0.0.1", "::1"}
+            valid = redis_url.scheme in {"redis", "rediss"} and bool(redis_url.hostname)
+            valid = valid and not redis_url.fragment and not redis_url.query
+            _ = redis_url.port
+            if not valid:
+                raise ValueError()
+            if not local and redis_url.scheme != "rediss":
+                problems.append("REDIS_URL must use rediss:// TLS for remote Redis")
+            if not redis_url.password and (settings.is_production or not local):
+                problems.append(f"REDIS_URL must include authentication credentials in {env_label}")
+        except ValueError:
+            problems.append("REDIS_URL must be a native redis:// or rediss:// connection URL")
     if not (settings.DATABASE_URL or "").strip():
         problems.append(f"DATABASE_URL is required in {env_label}")
 
@@ -154,3 +159,17 @@ def assert_safe_database_role(engine) -> None:
         )).one()
         if role.rolsuper or role.rolbypassrls:
             raise ConfigurationError("Runtime database role must be NOSUPERUSER NOBYPASSRLS")
+
+
+def assert_worker_heartbeat(redis_url: str) -> None:
+    """ARQ refreshes this expiring key every 30s. A Redis PING alone proves no worker."""
+    from redis import Redis
+    from arq.constants import default_queue_name, health_check_key_suffix
+
+    client = Redis.from_url(redis_url, socket_connect_timeout=2, socket_timeout=2)
+    try:
+        ttl = client.pttl(default_queue_name + health_check_key_suffix)
+        if not 0 < ttl <= 31_000:
+            raise RuntimeError("ARQ worker heartbeat missing or expired")
+    finally:
+        client.close()

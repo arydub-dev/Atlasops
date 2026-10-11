@@ -234,7 +234,6 @@ def supplier_performance_trend(
                 Supplier.organization_id == organization_id
             )
         )
-        or 80.0
     )
     avg_reliability = (
         db.scalar(
@@ -242,8 +241,9 @@ def supplier_performance_trend(
                 Supplier.organization_id == organization_id
             )
         )
-        or 90.0
     )
+    if avg_score is None or avg_reliability is None:
+        return []
     label = _utcnow().strftime("%b %Y")
     return [
         {
@@ -273,6 +273,8 @@ def inventory_health_breakdown(db: Session, organization_id: UUID) -> dict:
                 case(
                     (
                         (Inventory.max_stock > 0)
+                        & (Inventory.quantity > 0)
+                        & (Inventory.quantity > Inventory.reorder_point)
                         & (Inventory.quantity >= Inventory.max_stock),
                         1,
                     ),

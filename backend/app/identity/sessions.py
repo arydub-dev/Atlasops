@@ -72,6 +72,12 @@ def resolve_session(db: DBSession, raw_token: str | None) -> Session | None:
     if row is None or row.revoked_at is not None:
         return None
 
+    from app.identity.demo_access import PREFIX, allowed, session_label
+    if (row.device_label or "").startswith(PREFIX):
+        if row.device_label != session_label() or not allowed(db, row.user_id, row.organization_id):
+            row.revoked_at = _utcnow()
+            return None
+
     now = _utcnow()
     expires = _aware(row.expires_at)
     if expires <= now:

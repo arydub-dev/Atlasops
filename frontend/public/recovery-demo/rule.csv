@@ -1,0 +1,3 @@
+action,approval_reference,currency,direct_cost,donor_site,inbound_record_id,lead_days,owner,permitted,quantity,record_id,site,sku,source,source_updated_at
+transfer,AUTH-TRANSFER,USD,25,Plant B,,1,Materials planner,True,3,transfer-1,Plant A,SPARE-1,Synthetic transfer authorization,2026-10-10T18:51:44.136919+00:00
+expedite,AUTH-EXPEDITE,USD,90,,PO-line-1,1,Purchasing planner,True,3,expedite-1,Plant A,SPARE-1,Synthetic expedited commitment,2026-10-10T18:51:44.136919+00:00

@@ -96,7 +96,7 @@ const FEATURES = [
   {
     icon: Boxes,
     title: "Inventory Intelligence",
-    body: "Stock visibility, forecasts, reorder recommendations and warehouse optimization.",
+    body: "Stock visibility, rule-based shortage indicators, reorder recommendations and warehouse utilization.",
   },
   {
     icon: Building2,
