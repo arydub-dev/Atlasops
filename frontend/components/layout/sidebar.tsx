@@ -147,6 +147,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               return (
                 <Link
                   key={item.href}
+                  aria-current={active ? "page" : undefined}
                   href={item.href}
                   onClick={onNavigate}
                   className={cn(
@@ -175,7 +176,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <span
               className={cn(
                 "inline-block h-2 w-2 rounded-full",
-                feed === "online" && "bg-success animate-pulse",
+                feed === "online" && "bg-success",
                 feed === "degraded" && "bg-warning",
                 feed === "offline" && "bg-destructive",
                 feed === "checking" && "bg-muted-foreground"

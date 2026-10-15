@@ -25,6 +25,10 @@ test('RECOVERY-001 | critical workflow | imported risk, donor tradeoff, approval
  const imported=page.waitForResponse(r=>r.url().endsWith('/recovery/import/requirement')&&r.request().method()==='POST');
  await page.getByLabel('Recovery file').setInputFiles(directory+'/requirement.csv');expect((await imported).ok()).toBeTruthy();
  await expect(page.getByRole('status')).toContainText('Saved');
+ await page.goto('/mission-control');
+ await expect(page.getByRole('heading',{name:'Maintenance requiring attention',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Maintenance and recovery'})).toContainText('WO-A');
+ await page.goto('/recovery');
  await page.getByRole('button',{name:'Readiness',exact:true}).click();await page.getByRole('button',{name:/WO-A.*SHORTAGE/}).click();
  const transfer=page.locator('article').filter({has:page.getByRole('heading',{name:'Transfer 3 recorded units for SPARE-1',exact:true})});
  await expect(transfer).toContainText('Not currently feasible');await expect(transfer).toContainText('WO-B: READY → SHORTAGE');

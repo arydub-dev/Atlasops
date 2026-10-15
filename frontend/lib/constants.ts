@@ -14,7 +14,7 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
-    items: [{ href: "/mission-control", label: "Operational priorities", icon: "Radar" }],
+    items: [{ href: "/mission-control", label: "Overview", icon: "Radar" }],
   },
   {
     label: "Operations",

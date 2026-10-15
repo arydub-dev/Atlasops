@@ -1,4 +1,5 @@
 "use client";
+import { ReadinessOverview } from "@/components/operations/readiness-overview";
 import Link from 'next/link';
 import { useFetch } from '@/lib/use-fetch';
 import { PageHeader } from '@/components/shared/page-header';
@@ -15,6 +16,7 @@ export default function OperationsPage() {
     <PageHeader title="What needs attention?" description="AtlasOps turns fragmented supply-chain data into a prioritized list of problems and recommended actions for operations teams.">
       <Link href="/data-sources/import" className="text-sm font-medium text-primary underline">Import CSV / Excel</Link>
     </PageHeader>
+    <ReadinessOverview />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{Object.entries({critical:'Critical issues',low_stock:'Low-stock positions',overstock:'Overstock positions',shipment_risks:'Shipment risks',open_incidents:'Open incidents'}).map(([key,label])=><Card key={key}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold">{data.counts[key]}</p></CardContent></Card>)}</div>
     <p className="text-sm text-muted-foreground">Based on {data.inventory_positions} current inventory positions and recorded shipments. {data.ranking}</p>
     {!data.items.length&&<Card><CardContent className="space-y-3 pt-5"><h2 className="font-semibold">{data.inventory_positions?'No problems detected by the current rules.':'Start with your operational data.'}</h2><p className="text-sm text-muted-foreground">Upload warehouses and products, then inventory and shipments. Review missing or rejected records before relying on the results.</p><Link href="/data-sources/import" className="text-primary underline">Upload data</Link></CardContent></Card>}
