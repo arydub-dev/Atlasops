@@ -113,6 +113,12 @@ def cmd_force_disruption(args: argparse.Namespace) -> None:
         db.close()
 
 
+def cmd_provision_yc_demo(args):
+    from app.seed.yc_demo import provision
+    with SessionLocal() as db:
+        print(provision(db, args.email))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="supply")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -144,6 +150,10 @@ def main(argv: list[str] | None = None) -> int:
     p_user.add_argument("--name", default="User")
     p_user.add_argument("--org", default=None, help="Also create an organization as owner")
     p_user.set_defaults(func=cmd_create_user)
+
+    p_demo = sub.add_parser("provision-yc-demo", help="Create fictional demo workspace for an existing verified WorkOS user")
+    p_demo.add_argument("--email", required=True)
+    p_demo.set_defaults(func=cmd_provision_yc_demo)
 
     args = parser.parse_args(argv)
     args.func(args)

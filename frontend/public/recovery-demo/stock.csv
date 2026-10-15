@@ -1,0 +1,3 @@
+observed_quantity,record_id,reserved_quantity,site,sku,source,source_updated_at,usability
+2,stock-A,0,Plant A,SPARE-1,Synthetic count sheet,2026-10-10T18:51:44.136919+00:00,usable
+10,stock-B,0,Plant B,SPARE-1,Synthetic count sheet,2026-10-10T18:51:44.136919+00:00,usable

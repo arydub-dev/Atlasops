@@ -77,11 +77,11 @@ export default function AdvisorPage() {
     <div className="flex h-[calc(100vh-7rem)] flex-col space-y-4">
       <PageHeader
         title="Operations Copilot"
-        description="Graph-grounded orchestration — intent detection, retrieval, risk, and cited responses."
+        description="Investigate operational evidence, readiness calculations and recovery trade-offs."
       >
         <Badge variant={provider === "openai" ? "success" : "secondary"} className="gap-1.5">
           <Sparkles className="h-3 w-3" />
-          {provider === "openai" ? "OpenAI" : "Local Engine"}
+          {provider ? (provider === "local" ? "Deterministic engine" : `Configured provider: ${provider}`) : "Provider status unavailable"}
         </Badge>
       </PageHeader>
 
@@ -94,8 +94,7 @@ export default function AdvisorPage() {
               </div>
               <p className="mt-4 text-sm font-medium">What operational question can I analyze?</p>
               <p className="mt-1 max-w-md text-xs text-muted-foreground">
-                Mission summaries, root-cause, impact, supplier and inventory analysis — every answer
-                cites graph entities and live risk context.
+                Ask about recorded inventory, maintenance readiness or supplier commitments. Answers depend on available evidence; missing information is not proof of a delivery.
               </p>
               <div className="mt-5 flex max-w-xl flex-wrap justify-center gap-2">
                 {suggestions.map((s) => (

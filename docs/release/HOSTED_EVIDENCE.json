@@ -1,0 +1,89 @@
+{
+  "recorded_at_utc": "2026-10-10T14:44:08.345281+00:00",
+  "release": "NOT READY",
+  "overall": "FAIL",
+  "last_local_run": "20261010T143131Z-f4fb01",
+  "hosted_tests_executed": false,
+  "environment": {
+    "hosting_provider": "Vercel (intended; project unverified)",
+    "project_id": null,
+    "staging_url": null,
+    "public_url_not_verified_as_staging": "https://www.atlasops.online/",
+    "deployment_id": null,
+    "git_revision": null,
+    "backend_revision": null,
+    "synthetic_organization_ids": []
+  },
+  "checks": [
+    {
+      "id": "HOST-001",
+      "status": "BLOCKED",
+      "last_assessed_at_utc": "2026-10-10T14:44:08.345281+00:00",
+      "test_executed_at_utc": null,
+      "evidence": "Vercel dashboard navigation redirected to login; no authenticated project details accessible. Workspace has no .git or .vercel/project.json linkage. Public site is not verified as staging.",
+      "required": [
+        "Authenticated AtlasOps Vercel team/project access",
+        "Existing staging deployment URL and deployment/build ID",
+        "Deployed frontend/backend Git revisions and migration revision",
+        "Separate staging database and synthetic organization IDs",
+        "Controlled admin and restricted-role test accounts"
+      ]
+    },
+    {
+      "id": "SSO-001",
+      "status": "BLOCKED",
+      "last_assessed_at_utc": "2026-10-10T14:44:08.345281+00:00",
+      "test_executed_at_utc": null,
+      "evidence": "No verified WorkOS staging application, controlled accounts or hosted callback execution. Example configuration is not deployment evidence.",
+      "required": [
+        "WorkOS staging application and organization identifiers",
+        "Verified staging callback/logout URLs",
+        "Controlled invitation inboxes and test users",
+        "Secure staging credential configuration"
+      ]
+    },
+    {
+      "id": "AI-LIVE-001",
+      "status": "BLOCKED",
+      "last_assessed_at_utc": "2026-10-10T14:44:08.345281+00:00",
+      "test_executed_at_utc": null,
+      "evidence": "No staging provider configuration or actual provider execution observed. Deterministic advisor responses are not live-provider evidence.",
+      "required": [
+        "Staging provider project/model and test budget",
+        "Secure staging key configuration",
+        "Two synthetic organizations with canaries",
+        "Sanitized actual provider request IDs/traces and failure-test mechanism"
+      ]
+    },
+    {
+      "id": "VISUAL-REVIEW-001",
+      "status": "BLOCKED",
+      "last_assessed_at_utc": "2026-10-10T14:44:08.345281+00:00",
+      "test_executed_at_utc": null,
+      "evidence": "Desktop/mobile checklist prepared; no hosted revision reviewed or human approval received.",
+      "required": [
+        "Verified staging revision",
+        "Named human reviewer",
+        "Sanitized screenshots with routes and viewport sizes",
+        "Explicit approval of the exact reviewed revision"
+      ]
+    }
+  ],
+  "human_review": {
+    "checklist": "docs/release/HOSTED_PILOT_REVIEW.md",
+    "reviewer": null,
+    "reviewed_revision": null,
+    "desktop_viewport": "1440x900",
+    "mobile_viewport": "390x844",
+    "decision": "PENDING",
+    "approved_at_utc": null,
+    "evidence_paths": []
+  },
+  "constraints": [
+    "No deployment",
+    "No destructive testing against public site",
+    "Synthetic data only",
+    "No credentials in evidence",
+    "This pending ledger does not replace QA results or authorize a release"
+  ]
+}

@@ -86,7 +86,8 @@ def list_inventory(
     elif status_filter == "stockout":
         stmt = stmt.where(Inventory.quantity <= 0)
     elif status_filter == "overstock":
-        stmt = stmt.where(Inventory.quantity >= Inventory.max_stock, Inventory.max_stock > 0)
+        stmt = stmt.where(Inventory.quantity >= Inventory.max_stock, Inventory.max_stock > 0,
+                          Inventory.quantity > Inventory.reorder_point, Inventory.quantity > 0)
     elif status_filter == "ok":
         stmt = stmt.where(
             Inventory.quantity > Inventory.reorder_point,

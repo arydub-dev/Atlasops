@@ -14,7 +14,7 @@ type Prediction = {
   id: string;
   kind: string;
   title: string;
-  confidence: number;
+  confidence: number | null;
   reasoning: string;
   contributing_factors: string[];
   recommended_actions: string[];
@@ -42,8 +42,8 @@ export default function PredictionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Predictive Intelligence"
-        description="Shipment delays, supplier deterioration, shortages, congestion, and anomalies."
+        title="Operational Risk Indicators"
+        description="Rule-based indicators from current operational data. Scores are not calibrated probabilities; review recommendations before acting."
       >
         <Button onClick={generate} disabled={busy}>
           <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
@@ -55,7 +55,7 @@ export default function PredictionsPage() {
         {(data?.items || []).length === 0 && (
           <Card className="lg:col-span-2">
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No active predictions. Generate from historical operational data.
+              No active indicators. Generate from current operational data.
             </CardContent>
           </Card>
         )}
@@ -67,7 +67,7 @@ export default function PredictionsPage() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   {p.title}
                 </CardTitle>
-                <Badge variant="secondary">{Math.round(p.confidence * 100)}%</Badge>
+                <Badge variant="secondary">Rule-based</Badge>
               </div>
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {p.kind.replace(/_/g, " ")}

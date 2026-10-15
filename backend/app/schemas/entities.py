@@ -101,7 +101,7 @@ class InventoryEnriched(BaseModel):
     safety_stock: int
     max_stock: int
     avg_daily_demand: float
-    days_of_supply: float
+    days_of_supply: float | None
     status: str  # ok | low_stock | overstock | stockout
     reorder_recommendation: int
 

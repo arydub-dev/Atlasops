@@ -74,3 +74,22 @@ test("features and search identity are discoverable", async ({ page, request }) 
   const sitemap = await request.get("/sitemap.xml");
   expect(await sitemap.text()).toContain("https://www.atlasops.online/contact");
 });
+
+// UI-only regression: mocked failure is not hosted authentication evidence.
+test("private demo password visibility and authentication error", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", route => route.fulfill({status:401,json:{detail:"Unauthorized"}}));
+  await page.route("**/api/v1/auth/demo-login", route => route.fulfill({status:401,json:{detail:"Invalid demo credentials"}}));
+  await page.goto("/demo-login");
+  const password = page.getByLabel("Password", {exact:true});
+  await expect(password).toHaveAttribute("type", "password");
+  await page.getByRole("button", {name:"Show password",exact:true}).click();
+  await expect(password).toHaveAttribute("type", "text");
+  await page.getByRole("button", {name:"Hide password",exact:true}).click();
+  await expect(password).toHaveAttribute("type", "password");
+  await page.getByLabel("Login ID").fill("synthetic-reviewer");
+  await password.fill("synthetic-invalid-password");
+  await page.getByRole("button", {name:"Open demo",exact:true}).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("Invalid demo credentials");
+  await expect(page.getByRole("button", {name:"Open demo",exact:true})).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});

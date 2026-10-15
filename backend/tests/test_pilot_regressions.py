@@ -15,7 +15,7 @@ from app.core import telemetry
 def test_network_permission_does_not_unlock_mission_context(monkeypatch):
     monkeypatch.setattr(ai_orchestration, 'get_tenant', lambda: SimpleNamespace(
         organization_id=uuid4(), permissions={'ai.chat', 'network.read'}))
-    monkeypatch.setattr(ai_advisor, 'build_context', lambda _: {})
+    monkeypatch.setattr(ai_advisor, 'build_context', lambda _, prompt='': {})
     timeline = MagicMock()
     graph = MagicMock()
     monkeypatch.setattr(ai_orchestration.timeline, 'global_timeline', timeline)

@@ -14,11 +14,12 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
-    items: [{ href: "/mission-control", label: "Mission Control", icon: "Radar" }],
+    items: [{ href: "/mission-control", label: "Overview", icon: "Radar" }],
   },
   {
     label: "Operations",
     items: [
+      { href: "/recovery", label: "Critical spares readiness", icon: "Workflow" },
       { href: "/shipments", label: "Shipments", icon: "Truck" },
       { href: "/inventory", label: "Inventory", icon: "Boxes" },
       { href: "/warehouses", label: "Warehouses", icon: "Warehouse" },
@@ -52,7 +53,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/data-sources", label: "Overview", icon: "Database" },
       { href: "/connector-studio", label: "Connector Studio", icon: "Puzzle", access: "operate" },
       { href: "/data-sources/connectors", label: "Connectors", icon: "Plug", access: "operate" },
-      { href: "/data-sources/import", label: "CSV Import", icon: "Upload", access: "write" },
+      { href: "/data-sources/import", label: "Import CSV / Excel", icon: "Upload", access: "write" },
       { href: "/data-sources/excel", label: "Excel Import", icon: "FileSpreadsheet", access: "write" },
       { href: "/data-sources/pipeline", label: "Pipeline Monitor", icon: "Activity", access: "operate" },
       { href: "/workflows", label: "Automations", icon: "Workflow", access: "operate" },

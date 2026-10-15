@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -151,6 +152,7 @@ def root() -> dict:
     return {
         "name": settings.APP_NAME,
         "version": __version__,
+        "commit": os.environ.get("VERCEL_GIT_COMMIT_SHA") or os.environ.get("RELEASE_SHA"),
         "status": "ok",
         "docs": "/docs" if settings.api_docs_enabled else None,
         "api": API_PREFIX,
@@ -205,9 +207,17 @@ def health_ready() -> dict:
 
         ping_redis(settings.REDIS_URL)
         checks["redis"] = "ok"
-        checks["workers"] = "required"
+
     except Exception:
         logger.exception("health_ready_redis_failed")
         raise HTTPException(status_code=503, detail="not_ready:redis") from None
+
+    try:
+        from app.core.startup_checks import assert_worker_heartbeat
+        assert_worker_heartbeat(settings.REDIS_URL)
+        checks["workers"] = "heartbeat_ok"
+    except Exception:
+        logger.warning("health_ready_worker_heartbeat_failed")
+        raise HTTPException(status_code=503, detail="not_ready:worker") from None
 
     return {"status": "ready", "mode": "queued", "checks": checks}

@@ -140,3 +140,5 @@ __all__ = [
     "WorkflowRule",
     "WorkflowRun",
 ]
+
+from app.models.recovery import RecoveryRecord, RecoveryCase

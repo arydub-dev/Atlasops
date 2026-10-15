@@ -8,17 +8,29 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { LoadingState } from "@/components/shared/states";
 import { useDemoMode } from "@/lib/demo-mode";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const DEMO_SANDBOX = process.env.NEXT_PUBLIC_DEMO_SANDBOX === "true";
 
 function DemoBanner() {
   const { enabled } = useDemoMode();
-  if (!DEMO_SANDBOX || !enabled) return null;
+  const { currentOrganization, currentMembership } = useAuth();
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const seededDemo = currentOrganization?.settings?.demo_dataset === "atlas-manufacturing-v1";
+  if (!seededDemo && currentOrganization?.settings?.private_demo !== true && (!DEMO_SANDBOX || !enabled)) return null;
   return (
-    <div className="no-print flex items-center justify-center gap-2 border-b border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary">
+    <div className="no-print flex flex-wrap items-center justify-center gap-2 border-b border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary">
       <Sparkles className="h-3.5 w-3.5" />
-      Demo Mode active — alerts, disruptions and AI recommendations are populated for demonstration.
+      AtlasOps Demo Workspace — Synthetic Data
+      {seededDemo && ["owner", "admin"].includes(currentMembership?.role_slug ?? "") && <button className="ml-3 underline" disabled={resetting} onClick={async () => {
+        if (!window.confirm("Reset this fictional workspace? Demo operational edits and imports will be removed.")) return;
+        setResetting(true); setResetError("");
+        try { await api.post("/data/demo/reset"); window.location.reload(); }
+        catch (e) { setResetError(e instanceof Error ? e.message : "Reset failed"); setResetting(false); }
+      }}>{resetting ? "Resetting…" : "Reset demo data"}</button>}
+      {resetError && <span role="alert">{resetError}</span>}
     </div>
   );
 }
@@ -49,6 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:z-[60] focus:bg-background focus:p-3">Skip to content</a>
       <div className="hidden lg:block">
         <Sidebar />
       </div>
@@ -79,7 +92,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setMobileOpen(true)} />
         <DemoBanner />
-        <main className="flex-1 space-y-6 p-4 lg:p-6 animate-fade-in">{children}</main>
+        <main id="main-content" className="flex-1 space-y-6 p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );
