@@ -67,3 +67,5 @@ Thumbs.db
 .run/
 backend/.bootstrap/
 backend/.uvpython/
+
+.vercel/
