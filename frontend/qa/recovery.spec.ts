@@ -8,7 +8,14 @@ const api=process.env.ATLAS_QA_API!+'/api/v1';
 const root=resolve(dirname(process.env.ATLAS_QA_ORACLE!),'../..');
 
 test('RECOVERY-001 | critical workflow | imported risk, donor tradeoff, approval and recorded outcome',async({page,context})=>{
- test.setTimeout(150000);
+ // Exercise the workflow at an operator pace without raising API rate limits.
+ test.setTimeout(240000);
+ let nextRequestAt=Date.now();
+ await page.route(process.env.ATLAS_QA_API!+'/**',async route=>{
+  const wait=Math.max(0,nextRequestAt-Date.now());nextRequestAt=Date.now()+wait+850;
+  if(wait) await new Promise(resolve=>setTimeout(resolve,wait));
+  await route.continue();
+ });
  await context.addCookies([{name:fixture.cookie_name,value:fixture.sessions.empty,url:process.env.ATLAS_QA_API!}]);
  const directory=run+'/recovery-demo';
  execFileSync(process.env.ATLAS_QA_PYTHON!,[root+'/tools/recovery/demo.py','--output',directory]);
@@ -29,7 +36,17 @@ test('RECOVERY-001 | critical workflow | imported risk, donor tradeoff, approval
  await expect(page.getByRole('heading',{name:'Maintenance requiring attention',exact:true})).toBeVisible();
  await expect(page.getByRole('region',{name:'Maintenance and recovery'})).toContainText('WO-A');
  await page.goto('/recovery');
- await page.getByRole('button',{name:'Readiness',exact:true}).click();await page.getByRole('button',{name:/WO-A.*SHORTAGE/}).click();
+ await page.getByRole('button',{name:'Readiness',exact:true}).click();
+ await page.getByLabel('Search work order or part').fill('WO-A');
+ await expect(page.getByRole('button',{name:/WO-B.*READY/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/WO-A.*SHORTAGE/})).toBeVisible();
+ await page.getByLabel('Search work order or part').fill('');
+ await page.getByRole('combobox',{name:'Readiness status',exact:true}).selectOption('READY');
+ await expect(page.getByRole('button',{name:/WO-A.*SHORTAGE/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/WO-B.*READY/})).toBeVisible();
+ await page.getByRole('combobox',{name:'Readiness status',exact:true}).selectOption('');
+ await page.getByRole('combobox',{name:'Sort by',exact:true}).selectOption('status');
+ await page.getByRole('button',{name:/WO-A.*SHORTAGE/}).click();
  const transfer=page.locator('article').filter({has:page.getByRole('heading',{name:'Transfer 3 recorded units for SPARE-1',exact:true})});
  await expect(transfer).toContainText('Not currently feasible');await expect(transfer).toContainText('WO-B: READY → SHORTAGE');
  const expedite=page.locator('article').filter({has:page.getByRole('heading',{name:'Expedite 3 recorded units for SPARE-1',exact:true})});

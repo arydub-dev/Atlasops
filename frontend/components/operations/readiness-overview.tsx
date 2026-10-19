@@ -13,7 +13,7 @@ type RecoveryCase = { id: string; work_order: string; status: string; incident_i
 
 export function ReadinessOverview() {
   const { currentOrganization } = useAuth();
-  const [tour, setTour] = useState(true);
+  const [tour, setTour] = useState(false);
   const overview = useFetch<{ orders: Order[]; as_of: string }>("/recovery/overview", [currentOrganization?.id]);
   const cases = useFetch<RecoveryCase[]>("/recovery/cases", [currentOrganization?.id]);
   const demo = currentOrganization?.settings?.private_demo === true || currentOrganization?.settings?.demo_dataset === "atlas-manufacturing-v1";

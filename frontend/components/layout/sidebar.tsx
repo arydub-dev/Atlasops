@@ -111,7 +111,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) =>
-      (advanced || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources/import','/advisor','/settings'].includes(item.href)) &&
+      (advanced || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources','/data-sources/import','/advisor','/settings'].includes(item.href)) &&
       !(role === 'viewer' && item.href === '/advisor') &&
       navVisibleForRole(item.access, role, { isPlatformAdmin: !!user?.is_platform_admin })
     ),
@@ -127,13 +127,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           : "Checking API…";
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-border bg-card/40">
+    <aside className="sticky top-0 flex h-dvh w-64 flex-col border-r border-border bg-card/40">
       <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
         <Logo />
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto p-3">
-        <button className="px-3 text-xs text-muted-foreground underline" onClick={()=>setAdvanced(!advanced)}>{advanced?'Show core workflow':'Show all tools'}</button>
+      <nav aria-label="Application navigation" className="flex-1 space-y-5 overflow-y-auto p-3">
+        <button aria-expanded={advanced} className="px-3 text-xs text-muted-foreground underline" onClick={()=>setAdvanced(!advanced)}>{advanced?'Show core workflow':'Show all tools'}</button>
         {groups.map((group, gi) => (
           <div key={gi} className="space-y-1">
             {group.label && (

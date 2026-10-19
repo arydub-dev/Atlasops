@@ -35,7 +35,7 @@ async function login(page: Page) {
   await page.getByLabel('Password', {exact:true}).fill(fixture.password);
   await page.getByRole('button', {name:'Open demo',exact:true}).click();
   await expect(page).toHaveURL(/mission-control/);
-  await expect(page.getByRole('heading', {name:'What needs attention?',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'Operations overview',exact:true})).toBeVisible();
 }
 async function evidence(page: Page, name: string) {
   await page.screenshot({path: run + '/' + name + '.png', fullPage:true});
@@ -48,7 +48,7 @@ test('AUTH-001 | authentication | real login, invalid password, refresh, logout 
   await page.getByRole('button', {name:'Open demo',exact:true}).click();
   await expect(page.getByRole('alert')).toBeVisible();
   await login(page); await page.reload();
-  await expect(page.getByRole('heading', {name:'What needs attention?',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'Operations overview',exact:true})).toBeVisible();
   await page.getByRole('button',{name:/QA operations/}).click();
   await page.getByRole('menuitem',{name:'Sign out'}).click();
   await expect(page).toHaveURL(/login/);
