@@ -69,3 +69,6 @@ backend/.bootstrap/
 backend/.uvpython/
 
 .vercel/
+
+# Local verification artifacts
+.local/
