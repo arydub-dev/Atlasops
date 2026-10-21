@@ -29,8 +29,9 @@ from app.api.routers import (
     workflows,
 )
 from app.core.rate_limit import rate_limit_general
+from app.core.reviewer_demo import restrict_reviewer_demo
 
-api_router = APIRouter(dependencies=[Depends(rate_limit_general)])
+api_router = APIRouter(dependencies=[Depends(rate_limit_general), Depends(restrict_reviewer_demo)])
 api_router.include_router(auth.router)
 api_router.include_router(leads.router)
 api_router.include_router(billing.router)

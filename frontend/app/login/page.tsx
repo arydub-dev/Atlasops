@@ -1,5 +1,6 @@
 "use client";
 
+import ReviewerLogin from "../demo-login/page";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -175,6 +176,7 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  if (process.env.NEXT_PUBLIC_REVIEWER_DEMO_ONLY === "true") return <ReviewerLogin />;
   return (
     <Suspense
       fallback={

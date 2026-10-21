@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # --- App ---
     APP_NAME: str = "ATLASOPS"
     LEAD_CAPTURE_ENABLED: bool = False
+    REVIEWER_DEMO_ONLY: bool = False  # Isolated synchronous reviewer deployment; no external jobs
     DEMO_WORKSPACE_ID: str = ""  # Exact operator-approved fictional tenant; reset disabled by default
     SAP_BUSINESS_ONE_ALLOWED_ORIGINS: str = ""  # Operator-approved HTTPS origins, comma-separated
     API_V1_PREFIX: str = "/api/v1"

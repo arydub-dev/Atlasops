@@ -38,6 +38,20 @@ def validate_settings(settings: Settings, *, role: str = "api") -> list[str]:
             problems.append("warning: SEED_ON_STARTUP=true is discouraged even in development")
         return problems
 
+    if settings.REVIEWER_DEMO_ONLY:
+        from uuid import UUID
+        if env != "staging":
+            problems.append("REVIEWER_DEMO_ONLY requires ENVIRONMENT=staging")
+        if not settings.DEMO_LOGIN_PASSWORD_HASH or not settings.DEMO_LOGIN_ID:
+            problems.append("Reviewer credentials are required for isolated demo mode")
+        for value in (settings.DEMO_LOGIN_ORG_ID, settings.DEMO_LOGIN_USER_ID):
+            try:
+                UUID(value)
+            except (ValueError, TypeError):
+                problems.append("Reviewer organization and user IDs must be valid UUIDs")
+        if settings.OPENAI_API_KEY:
+            problems.append("External AI must be disabled in the synchronous reviewer demo")
+
     # Unknown environments fail closed (typos must not disable hardening).
     env_label = env or "unknown"
 

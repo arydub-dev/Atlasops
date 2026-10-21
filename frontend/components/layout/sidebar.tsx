@@ -111,6 +111,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) =>
+      (process.env.NEXT_PUBLIC_REVIEWER_DEMO_ONLY !== 'true' || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources','/data-sources/import'].includes(item.href)) &&
       (advanced || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources','/data-sources/import','/advisor','/settings'].includes(item.href)) &&
       !(role === 'viewer' && item.href === '/advisor') &&
       navVisibleForRole(item.access, role, { isPlatformAdmin: !!user?.is_platform_admin })

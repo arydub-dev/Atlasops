@@ -212,6 +212,12 @@ def health_ready() -> dict:
         logger.exception("health_ready_redis_failed")
         raise HTTPException(status_code=503, detail="not_ready:redis") from None
 
+    if settings.REVIEWER_DEMO_ONLY:
+        # Redis remains mandatory for authentication. The API dependency blocks
+        # every external/job surface and restricts all access to the demo user.
+        checks["workers"] = "disabled:reviewer_demo"
+        return {"status": "ready", "mode": "restricted_reviewer_demo", "checks": checks}
+
     try:
         from app.core.startup_checks import assert_worker_heartbeat
         assert_worker_heartbeat(settings.REDIS_URL)
