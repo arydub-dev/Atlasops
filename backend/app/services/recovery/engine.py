@@ -121,7 +121,7 @@ def calculate(records, positions, catalog, now, adjustments=None):
     return {'as_of':now.isoformat(),'policy':policy,'allocation_rule':'Earliest required date, then priority (1 highest), work-order ID and source record ID. Reservations remain unavailable. Each unit allocated once.','orders':orders,'quality':quality,'remaining_stock':[{'sku':key[0],'site':key[1],**p} for key,p in sorted(pools.items())],'notice':'Recorded quantities only; physical inventory is not verified. Scenario arrivals are estimates, not operational changes.'}
 
 
-def options(records,positions,catalog,now,work_order):
+def options(records,positions,catalog,now,work_order,*,internal=False):
     baseline=calculate(records,positions,catalog,now)
     target=next((o for o in baseline['orders'] if o['work_order']==work_order),None)
     if not target: return {'baseline':None,'options':[]}
@@ -166,6 +166,15 @@ def options(records,positions,catalog,now,work_order):
                     if previous['status']!=order['status']:affected.append({'work_order':order['work_order'],'before':previous['status'],'after':order['status']})
             target_after=next((o['status'] for o in scenario['orders'] if o['work_order']==work_order),None) if scenario else None
             result.append({'id':r['id']+':'+line['record_id'],'action':action,'quantity':deficit,'description':f'{action.title()} {deficit} recorded units for {line["sku"]}', 'arrival':at.isoformat() if d.get('lead_days') is not None else None,'direct_cost':d.get('direct_cost'),'currency':d.get('currency'),'cost_missing':d.get('direct_cost') is None or not d.get('currency'),'owner':d.get('owner'),'approval_reference':d.get('approval_reference'),'feasible':not missing,'limitations':missing,'target_after':target_after,'affected_work':affected,'evidence':[r['id'],line['record_id']],'assumptions':['Documented lead time is an estimate; human approval and execution required.','Donor surplus is calculated after all imported active demand.']})
+            resource_ids={r['id'],line['record_id']}
+            for change in changes:
+                if change['type']=='take':
+                    for p in baseline['remaining_stock']:
+                        if p['sku']==change['sku'] and p['site']==change['site']:resource_ids.update(p['evidence'])
+                elif change['type']=='expedite':resource_ids.add(change['inbound'])
+            result[-1]['evidence']=sorted(resource_ids)
+            if internal:
+                result[-1].update({'adjustments':changes,'rule_id':r['id'],'work_order':work_order,'requirement_id':line['record_id'],'preview_safe':preview_safe})
     # Currency differences preclude comparable price ranking.
     currencies={o['currency'] for o in result if o['feasible'] and not o['cost_missing']}
     cost_rank=baseline['policy']['ranking']=='known_cost' and len(currencies)==1 and all(not o['cost_missing'] for o in result if o['feasible'])

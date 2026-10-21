@@ -77,3 +77,43 @@ test('RECOVERY-001 | critical workflow | imported risk, donor tradeoff, approval
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBeTruthy();
  await page.screenshot({path:run+'/RECOVERY-mobile.png',fullPage:true});
 });
+
+test('RECOVERY-PLAN-001 | critical workflow | multi-order comparison and reviewed combined plan persists',async({page,context})=>{
+ test.setTimeout(240000);
+ let nextRequestAt=Date.now();
+ await page.route(process.env.ATLAS_QA_API!+'/**',async route=>{const wait=Math.max(0,nextRequestAt-Date.now());nextRequestAt=Date.now()+wait+850;if(wait)await new Promise(r=>setTimeout(r,wait));await route.continue();});
+ await context.addCookies([{name:fixture.cookie_name,value:fixture.sessions.empty,url:process.env.ATLAS_QA_API!}]);
+ const records=await (await page.request.get(api+'/recovery/records')).json();
+ const stamp=new Date().toISOString();
+ const deadline=(days:number)=>new Date(Date.now()+days*86400000).toISOString();
+ // These explicit corrections act only on the disposable QA tenant, with audit reasons.
+ for(const row of records){
+  let corrected;
+  if(row.kind==='inbound'&&row.data.record_id==='PO-line-1')corrected={...row.data,promised_at:deadline(5),source_updated_at:stamp};
+  if(row.kind==='stock'&&row.data.site==='Plant B')corrected={...row.data,reserved_quantity:1,source_updated_at:stamp};
+  if(row.kind==='requirement'&&row.data.work_order==='WO-B')corrected={...row.data,quantity:8,source_updated_at:stamp};
+  if(corrected)expect((await page.request.patch(api+'/recovery/records/'+row.id,{data:{expected:row.data,corrected,reason:'Synthetic multi-order scenario preparation'}})).ok()).toBeTruthy();
+ }
+ const requirements=`record_id,source,source_updated_at,work_order,sku,site,quantity,required_by,status,asset,priority\nline-C,Synthetic maintenance plan,${stamp},WO-C,SPARE-1,Plant A,2,${deadline(4)},planned,Pump-C,2\n`;
+ const rules=`record_id,source,source_updated_at,action,sku,site,quantity,lead_days,direct_cost,currency,approval_reference,repair_reference,owner,permitted\nrepair-1,Synthetic rotable ticket,${stamp},repair,SPARE-1,Plant A,2,2,40,USD,ENG-REPAIR,RT-1 two available rotables,Maintenance planner,true\n`;
+ for(const [kind,raw] of [['requirement',requirements],['rule',rules]])expect((await page.request.post(api+'/recovery/import/'+kind,{multipart:{file:{name:kind+'.csv',mimeType:'text/csv',buffer:Buffer.from(raw)}}})).ok()).toBeTruthy();
+ await page.goto('/mission-control');await expect(page.getByRole('region',{name:'Maintenance and recovery'})).toContainText('WO-C');await page.screenshot({path:run+'/SIMULATOR-dashboard.png',fullPage:true});
+ await page.goto('/data-sources');await expect(page.getByRole('region',{name:'Integration capability catalogue'})).toBeVisible();await expect(page.getByRole('region',{name:'Integration capability catalogue'})).toContainText('PROTOTYPE');await page.screenshot({path:run+'/SIMULATOR-integrations.png',fullPage:true});
+ await page.goto('/recovery');await expect(page.getByRole('button',{name:/WO-C.*SHORTAGE/})).toBeVisible();await page.screenshot({path:run+'/SIMULATOR-readiness.png',fullPage:true});
+ await page.getByRole('button',{name:'Plan comparison',exact:true}).click();await page.getByRole('button',{name:'Compare recovery plans',exact:true}).click();
+ const pair=page.getByRole('row').filter({hasText:'130 USD'}).filter({hasText:'Supported scenario'});
+ await expect(pair).toHaveCount(1);await pair.getByRole('button',{name:'Inspect plan'}).click();
+ await expect(page.getByRole('region',{name:'Multi-work-order recovery simulator'})).toContainText('WO-C');
+ await page.screenshot({path:run+'/SIMULATOR-comparison.png',fullPage:true});
+ await page.getByLabel('Plan decision rationale').fill('Expedite and repair cover both Plant A orders without consuming donor commitments.');await page.getByLabel('Plan due date').fill(deadline(2).slice(0,16));
+ await page.getByRole('button',{name:'Propose plan for review',exact:true}).click();await expect(page.getByRole('status')).toContainText('Plan proposed');
+ await page.getByRole('button',{name:'Resolution history',exact:true}).click();await page.getByRole('button',{name:'Approve decision (no external execution)',exact:true}).click();await expect(page.getByRole('heading',{name:'WO-A · approved',exact:true})).toBeVisible();
+ await page.reload();await page.getByRole('button',{name:'Resolution history',exact:true}).click();await expect(page.getByRole('heading',{name:'WO-A · approved',exact:true})).toBeVisible();
+ const cases=await (await page.request.get(api+'/recovery/cases')).json();const combined=cases.find((c:{data:{simulator?:boolean}})=>c.data.simulator);expect(combined.data.chosen.known_direct_cost).toBe(130);expect(combined.data.chosen.restored_work_orders).toEqual(['WO-A','WO-C']);
+ const incident=api+'/incidents/'+combined.incident_id;
+ expect((await page.request.patch(incident,{data:{status:'investigating',assign_to_me:true}})).ok()).toBeTruthy();expect((await page.request.patch(incident,{data:{status:'mitigating'}})).ok()).toBeTruthy();
+ expect((await page.request.post(incident+'/resolve',{data:{resolution:'Synthetic outcome recorded; readiness remains evidence-based and execution is not implied'}})).ok()).toBeTruthy();
+ expect((await page.request.post(api+'/recovery/cases/'+combined.id+'/outcome',{data:{reference:'QA-COMBINED-RESULT',notes:'Recorded review completed; no physical receipt or inventory change is asserted',completed_at:new Date().toISOString()}})).ok()).toBeTruthy();
+ await page.reload();await page.getByRole('button',{name:'Resolution history',exact:true}).click();await expect(page.getByText('Actual reference: QA-COMBINED-RESULT',{exact:false})).toBeVisible();await page.screenshot({path:run+'/SIMULATOR-resolution.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Plan comparison',exact:true}).click();await page.getByRole('button',{name:'Compare recovery plans',exact:true}).click();await expect(page.getByRole('columnheader',{name:'Known direct cost',exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBeTruthy();await page.screenshot({path:run+'/SIMULATOR-mobile.png',fullPage:true});
+});

@@ -73,6 +73,7 @@ class Rule(Source):
     approval_reference: str | None=None
     inbound_record_id: str | None=None
     owner: str | None=None
+    repair_reference: str | None=None
     permitted: bool=False
 
 class Policy(Source):

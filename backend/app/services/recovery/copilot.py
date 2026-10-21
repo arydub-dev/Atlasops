@@ -3,7 +3,7 @@ import re
 from datetime import datetime,timezone
 from sqlalchemy import select
 from app.models import RecoveryCase
-from app.services.recovery import store,engine
+from app.services.recovery import store,engine,simulator
 from app.tenancy.context import get_tenant
 
 def matches(prompt):
@@ -29,6 +29,19 @@ def context(db,prompt):
             for o in plan['options']:
                 lines.append(f"{o['description']}: feasible={o['feasible']}, estimated arrival={o['arrival']}, recorded direct cost={o['direct_cost']} {o['currency'] or '(currency missing)'}. {'; '.join(o['limitations'])}. Evidence: {', '.join(o['evidence'])}.")
             if not plan['options']:lines.append('I cannot verify a feasible recovery action: supporting timing, quantity or authorization records are missing.')
+    if len(requested)>1 and any(word in prompt.lower() for word in ['plan','simulat','compare']):
+        try:
+            comparison=simulator.compare(records,positions,catalog,now,[o['work_order'] for o in requested])
+            recommended=next((p for p in comparison['plans'] if p['id']==comparison['recommended_plan_id']),None)
+            lines.append(comparison['ranking'])
+            if recommended:
+                lines.append('First supported plan for human review: '+recommended['description'])
+                lines.append('Restored work orders: '+', '.join(recommended['restored_work_orders']))
+                lines.append('Known direct cost: '+str(recommended['known_direct_cost'])+' '+str(recommended['currency'])+'. Unknown values are not zero.')
+                lines.append('Evidence: '+', '.join(recommended['evidence']))
+                lines.extend(recommended['assumptions'])
+            else:lines.append('I cannot verify a feasible combined recovery plan from available authorized records.')
+        except ValueError as exc:lines.append('I cannot conclude a combined plan: '+str(exc))
     if 'past' in prompt.lower() or 'resolved' in prompt.lower():
         cases=db.scalars(select(RecoveryCase).where(RecoveryCase.organization_id==ctx.organization_id,RecoveryCase.status=='outcome_recorded').order_by(RecoveryCase.created_at.desc()).limit(10)).all()
         lines.append('Recorded past outcomes (not inferred savings):')

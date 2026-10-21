@@ -128,19 +128,6 @@ export default function SecurityPage() {
         description="We describe concrete architectural decisions rather than slogans. Here is what ATLASOPS actually implements — and why each choice matters."
       />
 
-      {/* Honesty note */}
-      <Section className="pb-0">
-        <Container>
-          <Reveal className="mx-auto max-w-3xl rounded-2xl border border-border bg-muted/40 p-5 text-sm leading-relaxed text-muted-foreground">
-            We avoid absolute claims like &ldquo;unbreakable&rdquo; or
-            &ldquo;bank-grade.&rdquo; No system is perfectly secure. Instead, this
-            page documents the specific controls and design decisions in the
-            platform — WorkOS sessions, RBAC, PostgreSQL RLS, and encrypted
-            connector credentials — so you can evaluate them on technical merit.
-          </Reveal>
-        </Container>
-      </Section>
-
       <Section>
         <Container>
           <div className="space-y-16">

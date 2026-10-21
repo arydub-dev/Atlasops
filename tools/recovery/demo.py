@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 from pathlib import Path
 import argparse
 
-def generate(folder,now):
+def generate(folder,now,multi=False):
     folder.mkdir(parents=True,exist_ok=True)
     stamp=now.isoformat();deadline=(now+timedelta(days=3)).isoformat()
     datasets={
@@ -18,12 +18,21 @@ def generate(folder,now):
       'rule':[
        dict(record_id='transfer-1',source='Synthetic transfer authorization',source_updated_at=stamp,action='transfer',sku='SPARE-1',site='Plant A',donor_site='Plant B',quantity=3,lead_days=1,direct_cost=25,currency='USD',approval_reference='AUTH-TRANSFER',owner='Materials planner',permitted=True),
        dict(record_id='expedite-1',source='Synthetic expedited commitment',source_updated_at=stamp,action='expedite',sku='SPARE-1',site='Plant A',quantity=3,lead_days=1,direct_cost=90,currency='USD',approval_reference='AUTH-EXPEDITE',inbound_record_id='PO-line-1',owner='Purchasing planner',permitted=True)]}
+    if multi:
+        datasets['stock'][1]['reserved_quantity']=1
+        datasets['requirement'][1]['quantity']=8
+        datasets['requirement'].append(dict(record_id='line-C',source='Synthetic maintenance plan',source_updated_at=stamp,work_order='WO-C',sku='SPARE-1',site='Plant A',quantity=2,required_by=(now+timedelta(days=4)).isoformat(),status='planned',asset='Pump-C',priority=2))
+        datasets['rule'].append(dict(record_id='repair-1',source='Synthetic available rotable inventory and repair ticket',source_updated_at=stamp,action='repair',sku='SPARE-1',site='Plant A',quantity=2,lead_days=2,direct_cost=40,currency='USD',approval_reference='ENG-REPAIR',repair_reference='ROTABLE-PAIR-1: two available units; repair ticket RT-1',owner='Maintenance planner',permitted=True))
     for kind,rows in datasets.items():
         fields=sorted(set().union(*(r.keys() for r in rows)))
         with (folder/(kind+'.csv')).open('w',newline='') as f:
             writer=csv.DictWriter(f,fieldnames=fields);writer.writeheader();writer.writerows(rows)
     (folder/'README.txt').write_text('Synthetic Recovery Engine demo. Generated '+stamp+'\n\nImport suppliers.csv, products.csv, warehouses.csv and inventory.csv through the existing Data Sources importer (in that order).\nThen import stock.csv, requirement.csv, inbound.csv and rule.csv from Critical spares readiness > Import, selecting each matching record type.\nFiles are available at /recovery-demo/<filename>.csv.\n\nWO-A is short by 3. Plant B has 10 but needs 9: transferring 3 would create donor risk and must be rejected. The documented expedite option advances the existing 3-unit PO line without duplicating inbound. Its known direct cost is USD 90.\nChoose the expedite option, record a rationale and due date, propose it, and approve it in Resolution history. No purchase order or external system is changed.\nUse the linked incident for assignment and lifecycle updates. Record a synthetic actual outcome reference. Readiness remains unchanged until authorized source imports/corrections establish the new operational facts.\nFor a final READY result, review the inbound source and correct promised_at to the documented expedited date with a reason, or import a new current inventory snapshot plus an audited stock-evidence correction after receipt; do not count a received PO as still open.\n\nAfter seven days these files intentionally become stale. Regenerate synthetic dates with tools/recovery/demo.py; never silently refresh timestamps on real source data.\n')
 
+    if multi:
+        with (folder/'README.txt').open('a') as f:
+            f.write('\nMULTI-WORK-ORDER VARIANT: Plant B reserves one unit and requires eight; only one remains uncommitted. WO-C requires two additional SPARE-1 at Plant A by day four. Repair ticket RT-1 supports two additional units at an estimated USD 40. Expediting PO-1 plus repairing the two units restores both WO-A and WO-C without harming WO-B, at USD 130 known direct cost. Use Plan comparison; individual actions cannot cover both requirements. All lead times remain estimates.\n')
+
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=Path('frontend/public/recovery-demo'));args=parser.parse_args()
-    generate(args.output,datetime.now(timezone.utc))
+    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=Path('frontend/public/recovery-demo'));parser.add_argument('--multi',action='store_true');args=parser.parse_args()
+    generate(args.output,datetime.now(timezone.utc),multi=args.multi)
