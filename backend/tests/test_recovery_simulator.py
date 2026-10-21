@@ -145,3 +145,15 @@ def test_same_requirement_and_rule_cannot_be_consumed_twice():
     rows,pos=fixture();rows.extend([rule(),source('rule','REPAIR',action='repair',sku='PART',site='Plant A',quantity=3,lead_days=2,permitted=True,approval_reference='ENG',repair_reference='RT-1')])
     pair=actions(simulate(rows,pos),2)[0];assert not pair['feasible']
     assert any('same requirement' in s for s in pair['limitations'])
+
+
+def test_withdrawal_preserves_history_and_allows_replacement(owner_client,imported):
+    payload=request_plan(owner_client);r=owner_client.post('/api/v1/recovery/plan-cases',json=payload);assert r.status_code==201
+    cid=r.json()['id']
+    assert owner_client.post('/api/v1/recovery/plan-cases',json=payload).status_code==409
+    assert owner_client.post(f'/api/v1/recovery/cases/{cid}/withdraw',json={'reason':'Superseded by newly reviewed material plan'}).status_code==200
+    assert owner_client.post(f'/api/v1/recovery/cases/{cid}/approve').status_code==409
+    assert owner_client.post('/api/v1/recovery/plan-cases',json=payload).status_code==201
+    cases=owner_client.get('/api/v1/recovery/cases').json();assert len(cases)==2
+    assert next(c for c in cases if c['id']==cid)['data']['withdrawal']['reason']
+    assert any(a['action']=='recovery.withdraw' for a in owner_client.get('/api/v1/recovery/audit').json())

@@ -145,7 +145,12 @@ def outcome(id:UUID,payload:Outcome,db:Session=Depends(get_db_with_tenant),ctx:T
     resolved_on_time=(final['status']=='READY' and incident is not None and incident.status==IncidentStatus.RESOLVED and now()<=min(deadlines)) if final and deadlines else None
     case.status='outcome_recorded';case.data={**case.data,'outcome':payload.model_dump(mode='json'),'recorded_by':str(ctx.user_id),'recorded_at':now().isoformat(),'final_readiness':final,'on_time':resolved_on_time,'action_completed_by_deadline':payload.completed_at<=min(deadlines) if deadlines else None}
     if case.data.get('simulator'):
-        case.data={**case.data,'final_plan_readiness':current['orders'],'estimated_direct_cost':case.data['chosen']['known_direct_cost'],'estimated_currency':case.data['chosen']['currency']}
+        selected_orders=[o for o in current['orders'] if o['work_order'] in case.data['work_orders']]
+        plan_deadlines=[engine.date(r['required_by']) for o in case.data['comparison']['baseline']['orders'] if o['work_order'] in case.data['work_orders'] for r in o['requirements'] if r['required_by']]
+        all_ready=bool(selected_orders) and len(selected_orders)==len(case.data['work_orders']) and all(o['status']=='READY' for o in selected_orders)
+        estimate=case.data['chosen']['known_direct_cost'];currency=case.data['chosen']['currency']
+        delta=payload.direct_cost-estimate if payload.direct_cost is not None and estimate is not None and currency and payload.currency==currency else None
+        case.data={**case.data,'final_plan_readiness':current['orders'],'estimated_direct_cost':estimate,'estimated_currency':currency,'actual_minus_estimated_cost':delta,'on_time':bool(all_ready and incident is not None and incident.status==IncidentStatus.RESOLVED and plan_deadlines and now()<=min(plan_deadlines)),'action_completed_by_deadline':payload.completed_at<=min(plan_deadlines) if plan_deadlines else None}
     write_audit(db,organization_id=ctx.organization_id,user_id=ctx.user_id,action='recovery.outcome',resource='recovery_case',resource_id=str(id),detail=json.dumps(case.data['outcome']))
     db.commit();return {'status':case.status,'final_readiness':final,'notice':'Outcome is user-recorded evidence; the linked incident follows its existing lifecycle.'}
 
@@ -199,3 +204,16 @@ def choose_plan(payload:PlanChoice,db:Session=Depends(get_db_with_tenant),ctx:Te
     db.add(case);db.flush()
     write_audit(db,organization_id=ctx.organization_id,user_id=ctx.user_id,action='recovery.propose_plan',resource='recovery_case',resource_id=str(case.id),detail=json.dumps(case.data))
     db.commit();return {'id':str(case.id),'incident_id':str(incident.id),'external_action_executed':False}
+
+class Withdrawal(BaseModel):
+    reason:str=Field(min_length=5,max_length=2000)
+
+@router.post('/cases/{id}/withdraw')
+def withdraw(id:UUID,payload:Withdrawal,db:Session=Depends(get_db_with_tenant),ctx:TenantContext=Depends(require_permission('recovery.manage'))):
+    inputs(db,ctx,'recovery.manage');case=owned(db,RecoveryCase,id,ctx)
+    if case.status not in ('proposed','approved'):raise HTTPException(409,'Only active decisions may be withdrawn')
+    if case.status=='approved' and 'recovery.approve' not in ctx.permissions:raise HTTPException(403,'Approval permission required to withdraw an approved decision')
+    previous=case.status
+    case.status='withdrawn';case.data={**case.data,'withdrawal':{'reason':payload.reason,'previous_status':previous,'user_id':str(ctx.user_id),'at':now().isoformat()}}
+    write_audit(db,organization_id=ctx.organization_id,user_id=ctx.user_id,action='recovery.withdraw',resource='recovery_case',resource_id=str(id),detail=json.dumps(case.data['withdrawal']))
+    db.commit();return {'status':'withdrawn','external_action_executed':False,'notice':'Decision withdrawn; incident history retained. No external transaction is reversed.'}
