@@ -27,7 +27,7 @@ export default function GetStartedPage() {
           </Reveal>
           <Reveal delay={160}>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-muted-foreground sm:text-lg">
-              Try ATLASOPS free for 14 days with your company email, or connect with us for enterprise access.
+              Explore ATLASOPS with your reviewer login, or connect with us for enterprise access.
             </p>
           </Reveal>
         </div>
@@ -36,7 +36,7 @@ export default function GetStartedPage() {
           <Reveal>
             <button
               type="button"
-              onClick={() => router.push("/login?signup=1")}
+              onClick={() => router.push("/reviewer-login")}
               className="flex h-full w-full flex-col rounded-2xl border border-primary bg-card p-7 text-left shadow-premium ring-1 ring-primary transition-all hover:-translate-y-1"
             >
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -44,11 +44,11 @@ export default function GetStartedPage() {
               </span>
               <h3 className="mt-5 text-lg font-semibold text-foreground">Try for free</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Enter your work email — ATLASOPS routes you to your organization&apos;s SSO
-                automatically, then into Mission Control or onboarding.
+                Use your provided login ID and password to explore the platform
+                with sample operational data.
               </p>
               <span className="mt-6 flex items-center gap-2 text-sm font-semibold text-primary">
-                Start your free trial
+                Open the platform
                 <ArrowRight className="h-4 w-4" />
               </span>
             </button>
@@ -77,7 +77,7 @@ export default function GetStartedPage() {
         <Reveal delay={120} className="mx-auto mt-10 max-w-md text-center text-xs text-muted-foreground">
           <Plug className="mx-auto mb-2 h-3.5 w-3.5" />
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-primary hover:underline">
+          <Link href="/reviewer-login" className="font-medium text-primary hover:underline">
             Sign in
           </Link>
         </Reveal>

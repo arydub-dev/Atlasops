@@ -308,7 +308,7 @@ export default function PlatformPage() {
         title="The full operational decision loop"
         description="ATLASOPS spans connect, understand, assess, decide and act — so your operation runs on intelligence instead of guesswork."
       >
-        <PrimaryButton href="/get-started">Start Free Demo</PrimaryButton>
+        <PrimaryButton href="/reviewer-login">Start Free Demo</PrimaryButton>
       </PageHero>
 
       {/* Feature deep-dives */}

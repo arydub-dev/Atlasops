@@ -63,13 +63,13 @@ export function MarketingNav() {
 
         <div className="hidden items-center gap-2 lg:flex">
           <Link
-            href="/login"
+            href="/reviewer-login"
             className="rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Login
           </Link>
           <Link
-            href="/get-started"
+            href="/reviewer-login"
             className="group inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:shadow-md hover:brightness-110"
           >
             Try for free
@@ -107,14 +107,14 @@ export function MarketingNav() {
           ))}
           <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
             <Link
-              href="/login"
+              href="/reviewer-login"
               onClick={() => setOpen(false)}
               className="rounded-lg border border-border px-3 py-2.5 text-center text-sm font-medium"
             >
               Login
             </Link>
             <Link
-              href="/get-started"
+              href="/reviewer-login"
               onClick={() => setOpen(false)}
               className="rounded-lg bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground"
             >

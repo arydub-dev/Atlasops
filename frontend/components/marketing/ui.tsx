@@ -182,12 +182,12 @@ export function CTASection() {
               See your entire operation in one place
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-base text-background/70">
-              Provision a fully populated demo workspace in seconds, or connect
-              your own systems and start building your operational picture.
+              Explore a sample operational workspace with your reviewer login,
+              or talk with our team about connecting your systems.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
-                href="/get-started"
+                href="/reviewer-login"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-background px-5 py-3 text-sm font-semibold text-foreground transition-all hover:brightness-95"
               >
                 Start Free Demo

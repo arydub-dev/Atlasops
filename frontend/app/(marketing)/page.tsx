@@ -211,7 +211,7 @@ export default function LandingPage() {
               </Reveal>
               <Reveal delay={240}>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <PrimaryButton href="/get-started">
+                  <PrimaryButton href="/reviewer-login">
                     Try for free
                   </PrimaryButton>
                   <SecondaryButton href="/contact">
@@ -382,7 +382,7 @@ export default function LandingPage() {
                 <PrimaryButton href="/integrations">
                   View integrations
                 </PrimaryButton>
-                <SecondaryButton href="/get-started">
+                <SecondaryButton href="/reviewer-login">
                   Talk to us to connect
                 </SecondaryButton>
               </div>
