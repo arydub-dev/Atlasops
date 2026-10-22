@@ -41,7 +41,7 @@ function DatasetBadge() {
   const demo = mode === "demo";
   return (
     <span
-      title={demo ? "Seeded demo dataset is active — no setup required" : "Connected to external data sources"}
+      title={demo ? "Demonstration workspace using sample operational data." : "Organization records; connector verification is shown in Data Sources."}
       className={cn(
         "hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium md:flex",
         demo
@@ -50,7 +50,7 @@ function DatasetBadge() {
       )}
     >
       {demo ? <Database className="h-3.5 w-3.5" /> : <Plug className="h-3.5 w-3.5" />}
-      {demo ? "Demo Dataset Active" : "Connected Mode"}
+      {demo ? "AtlasOps Demo" : "Organization data"}
     </span>
   );
 }
@@ -154,7 +154,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:px-6">
-      <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenu}>
+      <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation" onClick={onMenu}>
         <Menu className="h-5 w-5" />
       </Button>
       <div className="flex-1">

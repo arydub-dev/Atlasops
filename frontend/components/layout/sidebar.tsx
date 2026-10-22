@@ -81,15 +81,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { currentMembership, user } = useAuth();
   const role = currentMembership?.role_slug;
   const [feed, setFeed] = useState<FeedState>("checking");
+  const [advanced, setAdvanced] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '');
 
     async function ping() {
       try {
-        const res = await fetch(`${apiBase.replace(/\/$/, "")}/health/ready`, {
-          credentials: "omit",
+        const res = await fetch(`${apiBase.replace(/\/$/, "")}${apiBase ? "" : "/api"}/health/ready`, {
+          credentials: "same-origin",
           cache: "no-store",
         });
         if (cancelled) return;
@@ -110,6 +111,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) =>
+      (process.env.NEXT_PUBLIC_REVIEWER_DEMO_ONLY !== 'true' || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources','/data-sources/import'].includes(item.href)) &&
+      (advanced || ['/mission-control','/recovery','/inventory','/suppliers','/warehouses','/shipments','/incidents','/data-sources','/data-sources/import','/advisor','/settings'].includes(item.href)) &&
+      !(role === 'viewer' && item.href === '/advisor') &&
       navVisibleForRole(item.access, role, { isPlatformAdmin: !!user?.is_platform_admin })
     ),
   })).filter((group) => group.items.length > 0);
@@ -124,12 +128,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           : "Checking API…";
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-border bg-card/40">
+    <aside className="sticky top-0 flex h-dvh w-64 flex-col border-r border-border bg-card/40">
       <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
         <Logo />
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+      <nav aria-label="Application navigation" className="flex-1 space-y-5 overflow-y-auto p-3">
+        <button aria-expanded={advanced} className="px-3 text-xs text-muted-foreground underline" onClick={()=>setAdvanced(!advanced)}>{advanced?'Show core workflow':'Show all tools'}</button>
         {groups.map((group, gi) => (
           <div key={gi} className="space-y-1">
             {group.label && (
@@ -143,6 +148,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               return (
                 <Link
                   key={item.href}
+                  aria-current={active ? "page" : undefined}
                   href={item.href}
                   onClick={onNavigate}
                   className={cn(
@@ -171,7 +177,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <span
               className={cn(
                 "inline-block h-2 w-2 rounded-full",
-                feed === "online" && "bg-success animate-pulse",
+                feed === "online" && "bg-success",
                 feed === "degraded" && "bg-warning",
                 feed === "offline" && "bg-destructive",
                 feed === "checking" && "bg-muted-foreground"

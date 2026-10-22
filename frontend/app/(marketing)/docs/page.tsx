@@ -132,7 +132,7 @@ open http://localhost:3000`}</code>
           </Reveal>
           <Reveal className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <BookOpen className="h-4 w-4 text-primary" />
-            A demo workspace is seeded automatically on first run.
+            Production workspaces start with your own data. Synthetic demonstrations are separate from customer workspaces.
           </Reveal>
         </Container>
       </Section>

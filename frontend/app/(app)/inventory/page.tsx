@@ -215,7 +215,7 @@ export default function InventoryPage() {
                       <TableCell className="text-sm text-muted-foreground">{it.warehouse_name}</TableCell>
                       <TableCell className="text-right font-mono text-sm tabular-nums">{formatNumber(it.quantity)}</TableCell>
                       <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">{formatNumber(it.reorder_point)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm tabular-nums">{it.days_of_supply > 900 ? "∞" : it.days_of_supply}</TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">{it.days_of_supply === null ? "Unknown" : it.days_of_supply}</TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANT[it.status]}>{titleCase(it.status)}</Badge>
                       </TableCell>

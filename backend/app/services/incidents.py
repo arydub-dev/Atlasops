@@ -146,7 +146,10 @@ def incident_detail(db: Session, org_id: UUID, incident_id: UUID) -> dict[str, A
         "owner_user_id": str(inc.owner_user_id) if inc.owner_user_id else None,
         "summary": inc.summary,
         "ai_summary": inc.ai_summary,
-        "recommendations": inc.recommendations,
+        "recommendations": [
+            item if isinstance(item, str) else str(item.get("text", ""))
+            for item in (inc.recommendations or []) if isinstance(item, (str, dict))
+        ],
         "affected_entities": inc.affected_entities,
         "linked_alert_ids": inc.linked_alert_ids,
         "linked_risk_ids": inc.linked_risk_ids,
@@ -165,7 +168,7 @@ def resolve_incident(
     *,
     resolution: str,
 ) -> Incident | None:
-    inc = db.get(Incident, incident_id)
+    inc = db.scalar(select(Incident).where(Incident.id == incident_id, Incident.organization_id == org_id).with_for_update())
     if inc is None or inc.organization_id != org_id:
         return None
     inc.status = IncidentStatus.RESOLVED

@@ -67,3 +67,8 @@ Thumbs.db
 .run/
 backend/.bootstrap/
 backend/.uvpython/
+.vercel
+
+# Private local verification artifacts and temporary dependency links
+.local/
+/frontend/node_modules

@@ -7,16 +7,18 @@ feature works fully offline for demos and CI.
 """
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import re
+
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Alert, RiskAssessment, Supplier, Warehouse
-from app.models.enums import AlertStatus, RiskLevel
+from app.models import Alert, RiskAssessment, Supplier, Warehouse, Inventory, Product, Shipment
+from app.models.enums import AlertStatus, RiskLevel, ShipmentStatus
 from app.services import ingestion, metrics, risk_engine
 
 
-def build_context(db: Session) -> dict:
+def build_context(db: Session, prompt: str = "") -> dict:
     """Build AI context scoped to the caller's RBAC permissions.
 
     ``ai.chat`` alone must not become a privilege-escalation path into
@@ -28,6 +30,15 @@ def build_context(db: Session) -> dict:
     org_id = tenant.organization_id
     perms = tenant.permissions
     ctx: dict = {"permissions_applied": sorted(perms)}
+    from app.services.recovery import copilot
+    if copilot.matches(prompt):
+        return {**ctx, **copilot.context(db, prompt)}
+    from app.services.advisor_evidence import delivery_evidence
+    delivery = delivery_evidence(db, prompt)
+    if delivery is not None:
+        # A specific event must not be answered using unrelated supplier metrics.
+        ctx['delivery_evidence'] = delivery
+        return ctx
 
     if "analytics.read" in perms or "mission.read" in perms:
         ctx["kpis"] = metrics.compute_kpis(db, org_id)
@@ -96,8 +107,65 @@ def build_context(db: Session) -> dict:
             for a in open_alerts
         ]
 
+    if "inventory.read" in perms and "warehouses.read" in perms:
+        from app.services.inventory_logic import days_of_supply, reorder_recommendation
+        base = (select(Inventory, Product, Warehouse)
+            .join(Product, Product.id == Inventory.product_id)
+            .join(Warehouse, Warehouse.id == Inventory.warehouse_id)
+            .where(Inventory.organization_id == org_id, Product.organization_id == org_id,
+                   Warehouse.organization_id == org_id, Inventory.is_current.is_(True)))
+        # Match whole identifiers against authorized products BEFORE the broad
+        # shortage filter and ranking limit. Bound both input and output work.
+        tokens = sorted({word.lower().rstrip('.') for word in re.findall(r'[\w][\w./-]*', prompt) if len(word) <= 255})
+        requested = db.scalars(select(Product).where(Product.organization_id == org_id,
+            func.lower(Product.sku).in_(tokens)).order_by(Product.sku).limit(21)).all() if tokens else []
+        if requested:
+            ctx['requested_skus'] = [product.sku for product in requested[:20]]
+            ctx['requested_skus_too_many'] = len(requested) > 20
+            ctx['requested_inventory_truncated'] = False
+            positions = []
+            if not ctx['requested_skus_too_many']:
+                for product in requested:
+                    matches = db.execute(base.where(Product.id == product.id)
+                        .order_by(Warehouse.name, Inventory.id).limit(21)).all()
+                    ctx['requested_inventory_truncated'] |= len(matches) > 20
+                    positions.extend(matches[:20])
+        else:
+            positions = db.execute(base.where(Inventory.quantity <= Inventory.reorder_point)
+                .order_by(case((Inventory.avg_daily_demand > 0, Inventory.quantity * 1.0 / Inventory.avg_daily_demand), else_=1e12), Product.sku)
+                .limit(20)).all()
+        shipments = []
+        if "shipments.read" in perms and positions:
+            shipments = db.scalars(select(Shipment).where(Shipment.organization_id == org_id,
+                Shipment.product_id.in_([p.id for _, p, _ in positions]),
+                Shipment.status.in_([ShipmentStatus.DELAYED, ShipmentStatus.IN_TRANSIT, ShipmentStatus.CUSTOMS_HOLD]))
+                .order_by(Shipment.eta).limit(50)).all()
+        supplier_names = {}
+        if "suppliers.read" in perms and shipments:
+            supplier_names = {s.id: s.name for s in db.scalars(select(Supplier).where(
+                Supplier.organization_id == org_id, Supplier.id.in_([ship.supplier_id for ship in shipments if ship.supplier_id]))) }
+        ctx["inventory_priorities"] = [{
+            "sku": product.sku, "product": product.name, "warehouse": warehouse.name,
+            "quantity": inv.quantity, "reorder_point": inv.reorder_point,
+            "target_stock": inv.max_stock or inv.reorder_point * 2,
+            "avg_daily_demand": inv.avg_daily_demand, "days_of_supply": days_of_supply(inv.quantity, inv.avg_daily_demand),
+            "recommended_replenishment": reorder_recommendation(inv),
+            "snapshot_at": inv.snapshot_date.isoformat() if inv.snapshot_date else None,
+            "linked_shipments": [{"reference": ship.reference, "status": ship.status.value,
+                "supplier": supplier_names.get(ship.supplier_id),
+                "units": ship.units, "delay_days": ship.delay_days, "eta": ship.eta.isoformat()}
+                for ship in shipments if ship.product_id == product.id and ship.warehouse_id == warehouse.id],
+        } for inv, product, warehouse in positions]
+        ctx["inventory_method"] = "Current stock versus configured thresholds; reservations and incoming units are not deducted from suggested replenishment. Shipment links show association, not proven causation."
+
     if "connectors.read" in perms:
         ctx["data_sources"] = _safe_data_context(db)
+
+    if {'inventory.read','warehouses.read','shipments.read','suppliers.read','alerts.read'}.issubset(perms):
+        from app.services.priorities import operational_priorities
+        priorities = operational_priorities(db,org_id)
+        ctx['operational_priorities'] = [{key:item[key] for key in ('title','severity','explanation','recommendation','method')} for item in priorities['items'][:10]]
+        ctx['priority_ranking'] = priorities['ranking']
 
     return ctx
 
@@ -114,11 +182,22 @@ def answer(db: Session, prompt: str, *, context: dict | None = None) -> tuple[st
     """Return (response_text, model_name, context_snapshot)."""
     from app.services.ai_providers import get_ai_provider
 
-    context = build_context(db) if context is None else context
+    context = build_context(db, prompt) if context is None else context
+    if 'recovery_answer' in context:
+        return context['recovery_answer'], 'local-engine', context
     # Simulation intents: never invent outcomes — point at the simulation engine.
     if _wants_simulation(prompt):
         text = _simulation_guidance(prompt, context)
         return text, "local-engine", context
+
+    # Both supported provider configurations use the same factual contract.
+    # A model cannot substitute a supplier summary for missing delivery evidence
+    # or change a stored inventory quantity/calculated replenishment.
+    if 'delivery_evidence' in context:
+        from app.services.advisor_evidence import delivery_answer
+        return delivery_answer(context['delivery_evidence']), "local-engine", context
+    if context.get('requested_skus'):
+        return _inventory_answer(context), "local-engine", context
 
     provider = get_ai_provider()
     from app.core.telemetry import AI_PROVIDER_TOTAL
@@ -199,6 +278,17 @@ def _answer_locally(prompt: str, context: dict) -> str:
         return _data_sources_answer(context)
     if any(k in p for k in ("delay", "late", "increasing this week")):
         return _delay_answer(context)
+    matching = [row for row in context.get("inventory_priorities", []) if row['sku'].lower() in p or row['warehouse'].lower() in p]
+    if matching:
+        return _inventory_answer({**context, 'inventory_priorities':matching})
+    if context.get('operational_priorities') and any(k in p for k in ('urgent','address first','what should','operational issues','priorities','problems right now')):
+        lines=['Recorded operational priorities',context['priority_ranking']]
+        for item in context['operational_priorities']:
+            lines.extend([f"- {item['severity']}: {item['title']}",f"  Evidence: {item['explanation']}",f"  Recommendation: {item['recommendation']}"])
+        lines.append('These are recommendations. No supplier has been contacted, no order placed, and no stock changed.')
+        return '\n'.join(lines)
+    if context.get("inventory_priorities") and any(k in p for k in ("warehouse", "stockout", "inventory", "replenish", "urgent", "what should", "operational issues")):
+        return _inventory_answer(context)
     if any(k in p for k in ("warehouse", "stockout", "inventory")):
         return _inventory_answer(context)
     if any(k in p for k in ("supplier", "vendor")):
@@ -299,6 +389,30 @@ def _delay_answer(context: dict) -> str:
 
 
 def _inventory_answer(context: dict) -> str:
+    if context.get('requested_skus_too_many'):
+        return 'Please narrow the question to at most 20 SKUs so each requested product can be checked.'
+    positions = context.get("inventory_priorities")
+    if context.get('requested_skus') and not positions:
+        return 'I cannot verify current inventory for the requested SKU(s) from the available authorized inventory records.'
+    if positions:
+        lines = ["Recorded inventory for the requested SKU(s):" if context.get('requested_skus')
+                 else "Recorded inventory below reorder thresholds (up to 20 positions):"]
+        for row in positions:
+            coverage = f"{row['days_of_supply']:g} days" if row['days_of_supply'] is not None else "unknown"
+            lines.append(f"- {row['product']} ({row['sku']}) at {row['warehouse']}: {row['quantity']} units; reorder threshold {row['reorder_point']}; average daily demand {row['avg_daily_demand']}; stock coverage {coverage}; suggested replenishment {row['recommended_replenishment']} units.")
+            if context.get('requested_skus'):
+                if row['quantity'] <= row['reorder_point']:
+                    lines.append(f"  Calculation: max(target stock {row['target_stock']} − current quantity {row['quantity']}, 0) = {row['recommended_replenishment']} units.")
+                else:
+                    lines.append('  No replenishment is suggested by the threshold rule because stock is above the reorder point.')
+            for shipment in row['linked_shipments']:
+                supplier = f"; supplier {shipment['supplier']}" if shipment.get('supplier') else ""
+                lines.append(f"  Linked shipment {shipment['reference']}: {shipment['status']}, {shipment['units']} units, recorded delay {shipment['delay_days']} days; ETA {shipment['eta']}{supplier}.")
+        if context.get('requested_inventory_truncated'):
+            lines.append('Showing at most 20 current positions per requested SKU; this is not an exhaustive warehouse list.')
+        lines.append(context.get('inventory_method', ''))
+        lines.append("Next: confirm demand and supplier delivery dates, then track the approved response in an incident. No order has been placed and no inventory has been changed.")
+        return "\n".join(lines)
     whs = context.get("high_utilization_warehouses") or []
     if not whs:
         return "Warehouse risk analysis requires warehouses.read permission."

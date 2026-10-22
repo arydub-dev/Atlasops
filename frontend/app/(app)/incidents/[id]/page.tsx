@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
 import type { IncidentDetail } from "@/lib/types";
 import { relativeTime, titleCase } from "@/lib/format";
@@ -22,19 +23,34 @@ export default function IncidentDetailPage() {
   const { data, loading, error, refetch } = useFetch<IncidentDetail>(`/incidents/${params.id}`, [
     params.id,
   ]);
+  const { user, currentMembership } = useAuth();
+  const canResolve = ["owner", "admin", "operations_director", "operations_manager", "warehouse_manager", "transportation", "demo_operator"].includes(currentMembership?.role_slug || "");
+  const [note, setNote] = useState("");
+  const [actionError, setActionError] = useState("");
   const [resolution, setResolution] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function resolve() {
     if (!resolution.trim() || busy) return;
     setBusy(true);
+    setActionError("");
     try {
       await api.post(`/incidents/${params.id}/resolve`, { resolution: resolution.trim() });
       await refetch();
       setResolution("");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not resolve incident");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function progress(body: { status?: string; assign_to_me?: boolean; note?: string }) {
+    if (busy) return;
+    setBusy(true); setActionError("");
+    try { await api.patch(`/incidents/${params.id}`, body); await refetch(); setNote(""); }
+    catch (e) { setActionError(e instanceof Error ? e.message : "Update failed"); }
+    finally { setBusy(false); }
   }
 
   if (loading) return <LoadingState />;
@@ -54,10 +70,17 @@ export default function IncidentDetailPage() {
         <Badge variant="secondary">{titleCase(data.status)}</Badge>
       </PageHeader>
 
+      {actionError && <p role="alert" className="text-destructive">{actionError}</p>}
+      {open && canResolve && <div className="flex gap-2"><Input aria-label="Progress note" value={note} onChange={e=>setNote(e.target.value)} maxLength={4000} placeholder="Add a progress note"/><Button disabled={busy || !note.trim()} onClick={()=>progress({note:note.trim()})}>Save note</Button></div>}
+      {open && canResolve && <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" disabled={busy || data.owner_user_id === user?.id} onClick={() => progress({assign_to_me:true})}>{data.owner_user_id === user?.id ? "Assigned to you" : "Assign to me"}</Button>
+        {data.status === "open" && <Button disabled={busy} onClick={() => progress({status:"investigating"})}>Start investigation</Button>}
+        {data.status === "investigating" && <Button disabled={busy} onClick={() => progress({status:"mitigating"})}>Start mitigation</Button>}
+      </div>}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardHeader>
-            <CardTitle className="text-sm">AI Summary</CardTitle>
+            <CardTitle className="text-sm">{data.ai_summary ? "AI Summary" : "Incident Summary"}</CardTitle>
           </CardHeader>
           <CardContent>
             {data.ai_summary || data.summary ? (
@@ -117,7 +140,7 @@ export default function IncidentDetailPage() {
                     <span className="text-[11px] text-muted-foreground">{relativeTime(e.occurred_at)}</span>
                   )}
                 </div>
-                {e.summary && <p className="text-xs text-muted-foreground">{e.summary}</p>}
+                {(e.message || e.summary) && <p className="text-xs text-muted-foreground">{e.message || e.summary}</p>}
               </li>
             ))}
             {(data.timeline || []).length === 0 && (
@@ -127,7 +150,7 @@ export default function IncidentDetailPage() {
         </CardContent>
       </Card>
 
-      {open ? (
+      {open && canResolve ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Resolve Incident</CardTitle>
@@ -143,14 +166,14 @@ export default function IncidentDetailPage() {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : !open ? (
         <Card>
           <CardContent className="pt-5 text-sm">
             <p className="font-medium">Resolved</p>
             <p className="mt-1 text-muted-foreground">{data.resolution}</p>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }

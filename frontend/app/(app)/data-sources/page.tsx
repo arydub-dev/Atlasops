@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { IntegrationCatalogue } from "@/components/data/integration-catalogue";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -14,7 +15,7 @@ import {
 import { api } from "@/lib/api";
 import { canWriteRole, useAuth } from "@/lib/auth";
 import { useFetch } from "@/lib/use-fetch";
-import type { DataSource, DataSummary, IntegrationTemplate } from "@/lib/types";
+import type { DataSource, DataSummary } from "@/lib/types";
 import { formatNumber, relativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { Kpi } from "@/components/shared/kpi";
@@ -29,7 +30,6 @@ export default function DataSourcesPage() {
   const canWrite = canWriteRole(currentMembership?.role_slug);
   const { data: summary, loading, error, refetch } = useFetch<DataSummary>("/data/summary");
   const { data: sources, refetch: refetchSources } = useFetch<DataSource[]>("/data/sources");
-  const { data: integrations } = useFetch<IntegrationTemplate[]>("/data/integrations");
   const [syncing, setSyncing] = useState<string | null>(null);
 
   async function sync(id: string) {
@@ -53,32 +53,31 @@ export default function DataSourcesPage() {
   }
   if (error || !summary) return <ErrorState message={error || "Failed to load data sources"} />;
 
-  const available = (integrations ?? []).filter((i) => !i.configured);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Data Sources" description="Connect and monitor enterprise systems feeding the control tower.">
         {summary.mode === "demo" ? (
           <Badge variant="warning" className="gap-1.5">
-            <Database className="h-3 w-3" /> Demo Dataset Active
+            <Database className="h-3 w-3" /> AtlasOps Demo
           </Badge>
         ) : (
-          <Badge variant="success" className="gap-1.5">
-            <Plug className="h-3 w-3" /> Connected Mode
+          <Badge variant="secondary" className="gap-1.5">
+            <Plug className="h-3 w-3" /> Organization records
           </Badge>
         )}
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Connected Systems" value={formatNumber(summary.connected_systems)} icon={Plug} intent="success" sub={`${summary.total_sources} total sources`} />
-        <Kpi label="Available Integrations" value={formatNumber(summary.available_integrations)} icon={Database} sub="ready to connect" />
+        <Kpi label="Configured sources" value={formatNumber(summary.total_sources)} icon={Plug} intent="success" sub={`${summary.total_sources} total sources`} />
+        <Kpi label="Catalogue entries" value={formatNumber(summary.available_integrations)} icon={Database} sub="see capability status below" />
         <Kpi label="Records Imported" value={formatNumber(summary.records_imported_total)} icon={CheckCircle2} sub={`${formatNumber(summary.records_imported_today)} today`} />
         <Kpi
           label="Last Sync"
           value={summary.last_sync_at ? relativeTime(summary.last_sync_at) : "—"}
           icon={Clock}
           intent={summary.failures.length ? "warning" : "default"}
-          sub={summary.failures.length ? `${summary.failures.length} failing` : "all healthy"}
+          sub={summary.failures.length ? `${summary.failures.length} failing` : "no failures recorded"}
         />
       </div>
 
@@ -104,7 +103,7 @@ export default function DataSourcesPage() {
       {/* Connected systems */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-sm">Connected Systems</CardTitle>
+          <CardTitle className="text-sm">Configured sources</CardTitle>
           <Link href="/data-sources/connectors">
             <Button variant="ghost" size="sm">
               Manage connectors <ArrowRight className="h-3.5 w-3.5" />
@@ -161,39 +160,7 @@ export default function DataSourcesPage() {
         </CardContent>
       </Card>
 
-      {/* Available integrations */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-sm">Available Integrations</CardTitle>
-          <Link href="/data-sources/connectors">
-            <Button variant="ghost" size="sm">
-              View all <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {available.map((i) => (
-            <Link
-              key={i.type}
-              href="/data-sources/connectors"
-              className="flex items-start gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-accent/40"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <ConnectorIcon type={i.type} className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium leading-tight">{i.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{i.category}</p>
-              </div>
-            </Link>
-          ))}
-          {available.length === 0 && (
-            <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
-              All available integrations are configured.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <IntegrationCatalogue />
     </div>
   );
 }

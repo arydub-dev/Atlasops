@@ -268,7 +268,10 @@ def configure_source(
     if body.auth_method is not None:
         config["auth_method"] = body.auth_method
     if body.sync_frequency is not None:
-        c.sync_frequency = body.sync_frequency
+        from app.connectors.schedule import parse_sync_frequency
+        if body.sync_frequency.lower() not in {"manual", ""} and parse_sync_frequency(body.sync_frequency) is None:
+            raise HTTPException(status_code=400, detail="Choose a supported periodic frequency or Manual")
+        c.sync_frequency = body.sync_frequency or None
     if body.webhook_url is not None:
         c.webhook_url = body.webhook_url
 
@@ -296,6 +299,13 @@ def configure_source(
 
     try:
         validate_connector_config_urls(c.connector_type, config)
+        if "sync_entities" in config:
+            from app.connectors.mapped_sync import validate_mappings
+            from app.connectors.base import ConnectorError
+            try:
+                validate_mappings(config)
+            except ConnectorError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SSRFError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -335,7 +345,7 @@ async def test_connection(
         connector = create_connector(
             c.connector_type,
             organization_id=ctx.organization_id,
-            config=c.config or {},
+            config={**(c.config or {}), "_connection_id": str(c.id)},
             credentials=credentials,
         )
         ok = await connector.test_connection()
@@ -574,6 +584,7 @@ def import_preview(
 @router.post("/import/commit", response_model=dict)
 def import_commit(
     entity: str = Form(...),
+    mode: str = Form("create"),
     mapping: str = Form(...),
     sheet: str | None = Form(None),
     file: UploadFile = File(...),
@@ -583,6 +594,8 @@ def import_commit(
 ) -> dict:
     if entity not in ingestion.ENTITY_SPECS:
         raise HTTPException(status_code=400, detail="Unknown entity")
+    if mode not in {"create", "update"} or (mode == "update" and entity not in {"products", "shipments"}):
+        raise HTTPException(status_code=400, detail="Update mode supports products and shipments only")
     try:
         mapping_dict = json.loads(mapping)
     except json.JSONDecodeError as exc:
@@ -616,6 +629,7 @@ def import_commit(
         source_name=safe_name or f"{source_type} upload",
         source_type=source_type,
         user_id=ctx.user_id,
+        mode=mode,
     )
     from app.services.audit import write_audit
 
@@ -626,7 +640,7 @@ def import_commit(
         action="import",
         resource="import_job",
         resource_id=str(result.get("job_id") or ""),
-        detail=f"{entity}:{result.get('status')}:{result.get('rows_imported', 0)}",
+        detail=f"{entity}:{mode}:{result.get('status')}:{result.get('rows_imported', 0)}",
         request=None,
     )
     db.commit()
@@ -662,3 +676,17 @@ def pipeline_runs(
         .limit(60)
     ).all()
     return [_job_dict(j) for j in jobs]
+
+
+@router.post("/demo/reset")
+def reset_demo(db: Session = Depends(get_db_with_tenant),
+               ctx: TenantContext = Depends(require_permission("org.update"))) -> dict:
+    from app.seed.yc_demo import reset_workspace
+    try:
+        return reset_workspace(db, ctx.organization_id, ctx.user_id)
+    except PermissionError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

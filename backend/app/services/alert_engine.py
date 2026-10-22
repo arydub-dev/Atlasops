@@ -37,7 +37,7 @@ def _exists(
     )
 
 
-def generate_alerts(db: Session) -> int:
+def generate_alerts(db: Session, *, deliver_notifications: bool = True) -> int:
     """Scan state and create alerts for open conditions. Returns count created."""
     org_id = get_tenant().organization_id
     new_alerts: list[Alert] = []
@@ -161,10 +161,10 @@ def generate_alerts(db: Session) -> int:
                 alert_type=AlertType.FORECASTED_DEMAND_SPIKE,
                 priority=AlertPriority.MEDIUM,
                 status=AlertStatus.OPEN,
-                title=f"Demand spike forecast: {prod_name} @ {wh_name}",
+                title=f"Inventory coverage risk: {prod_name} @ {wh_name}",
                 message=(
                     f"{prod_name} at {wh_name} has only "
-                    f"{inv.quantity / inv.avg_daily_demand:.0f} days of cover against rising demand "
+                    f"{inv.quantity / inv.avg_daily_demand:.0f} days of cover against recorded average demand "
                     f"({inv.avg_daily_demand:.0f}/day). Pre-build inventory."
                 ),
                 entity_type="inventory",
@@ -174,7 +174,7 @@ def generate_alerts(db: Session) -> int:
 
     db.add_all(new_alerts)
     db.flush()
-    if new_alerts:
+    if new_alerts and deliver_notifications:
         from app.services.alert_channels import dispatch_new_alerts
 
         dispatch_new_alerts(db, new_alerts)

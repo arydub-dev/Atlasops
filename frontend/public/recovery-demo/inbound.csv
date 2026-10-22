@@ -1,0 +1,2 @@
+confirmed,date_source,line,open_quantity,ordered_quantity,po,promised_at,record_id,site,sku,source,source_updated_at,supplier
+True,Synthetic confirmed promise,1,3,3,PO-1,2026-10-15T18:51:44.136919+00:00,PO-line-1,Plant A,SPARE-1,Synthetic supplier commitment,2026-10-10T18:51:44.136919+00:00,Synthetic supplier

@@ -29,8 +29,9 @@ from app.api.routers import (
     workflows,
 )
 from app.core.rate_limit import rate_limit_general
+from app.core.reviewer_demo import restrict_reviewer_demo
 
-api_router = APIRouter(dependencies=[Depends(rate_limit_general)])
+api_router = APIRouter(dependencies=[Depends(rate_limit_general), Depends(restrict_reviewer_demo)])
 api_router.include_router(auth.router)
 api_router.include_router(leads.router)
 api_router.include_router(billing.router)
@@ -56,3 +57,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(network.router)
 api_router.include_router(data.router)
 api_router.include_router(ai.router)
+from app.api.routers import priorities
+api_router.include_router(priorities.router)
+from app.api.routers import recovery
+api_router.include_router(recovery.router)

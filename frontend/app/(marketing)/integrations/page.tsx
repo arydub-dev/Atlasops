@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Image from "next/image";
 import {
   CheckCircle2,
   Database,
@@ -36,15 +36,16 @@ const CONNECTORS: {
   kind: string;
   status: "Self-serve" | "Available" | "Beta" | "Coming Soon";
   note: string;
+  logo?: string;
 }[] = [
   { name: "CSV Import", kind: "File", status: "Self-serve", note: "Drag-and-drop, mapping, validation" },
-  { name: "Excel Import", kind: "File", status: "Self-serve", note: "Worksheet selection & mapping" },
-  { name: "Microsoft Dynamics 365 BC", kind: "ERP", status: "Beta", note: "OAuth + companies, items, sales orders" },
-  { name: "Salesforce", kind: "CRM", status: "Beta", note: "OAuth + Account/Opportunity → suppliers" },
-  { name: "UPS Tracking", kind: "TMS", status: "Beta", note: "OAuth + tracking updates on shipments" },
+  { name: "Excel Import", logo: "microsoftexcel", kind: "File", status: "Self-serve", note: "Worksheet selection & mapping" },
+  { name: "Microsoft Dynamics 365 BC", logo: "dynamics365", kind: "ERP", status: "Beta", note: "OAuth + companies, items, sales orders" },
+  { name: "Salesforce", logo: "salesforce", kind: "CRM", status: "Beta", note: "OAuth + Account/Opportunity → suppliers" },
+  { name: "UPS Tracking", logo: "ups", kind: "TMS", status: "Beta", note: "OAuth + tracking updates on shipments" },
   { name: "REST API", kind: "API", status: "Coming Soon", note: "Generic REST connector planned" },
-  { name: "SAP S/4HANA", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
-  { name: "Oracle ERP", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
+  { name: "SAP S/4HANA", logo: "sap", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
+  { name: "Oracle ERP", logo: "oracle", kind: "ERP", status: "Coming Soon", note: "Not yet shipped" },
   { name: "Warehouse Mgmt (WMS)", kind: "WMS", status: "Coming Soon", note: "Not yet shipped" },
 ];
 
@@ -75,24 +76,6 @@ export default function IntegrationsPage() {
         <PrimaryButton href="/get-started">Talk to us to connect</PrimaryButton>
       </PageHero>
 
-      {/* Capability note */}
-      <Section className="pb-0">
-        <Container>
-          <Reveal className="mx-auto flex max-w-3xl items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-5">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-            <p className="text-sm leading-relaxed text-foreground">
-              Status badges reflect what ships today: Self-serve file import,
-              Beta connectors for Dynamics BC, Salesforce, and UPS, and Coming Soon
-              for SAP, Oracle, generic REST, and WMS. Beta connectors use real OAuth
-              and live APIs when credentials are configured.{" "}
-              <Link href="/get-started" className="font-medium text-primary hover:underline">
-                Get in touch to connect your systems.
-              </Link>
-            </p>
-          </Reveal>
-        </Container>
-      </Section>
-
       {/* Connector grid */}
       <Section>
         <Container>
@@ -108,8 +91,10 @@ export default function IntegrationsPage() {
                 className="rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-card"
               >
                 <div className="flex items-start justify-between">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    {c.kind === "File" ? (
+                  <span className={cn("flex h-12 w-16 items-center justify-center rounded-xl p-2", c.logo ? "border border-border bg-white" : "bg-primary/10 text-primary")}>
+                    {c.logo ? (
+                      <Image src={`/integration-brands/${c.logo}.svg`} width={48} height={32} className="h-8 w-12 object-contain" alt={`${c.name} logo`} />
+                    ) : c.kind === "File" ? (
                       c.name.includes("Excel") ? (
                         <FileSpreadsheet className="h-5 w-5" />
                       ) : (

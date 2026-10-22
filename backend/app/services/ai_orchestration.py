@@ -18,6 +18,7 @@ TOOLS = {
     "executive_report": "Executive Report",
     "root_cause": "Root Cause Analysis",
     "supplier_analysis": "Supplier Analysis",
+    "delivery_verification": "Delivery Verification",
     "inventory_analysis": "Inventory Analysis",
     "impact_analysis": "Impact Analysis",
     "operational_qa": "Operational Q&A",
@@ -26,6 +27,9 @@ TOOLS = {
 
 
 def detect_intent(prompt: str) -> str:
+    from app.services.advisor_evidence import is_delivery_question
+    if is_delivery_question(prompt):
+        return "delivery_verification"
     p = prompt.lower()
     if any(w in p for w in ("root cause", "why did", "rca")):
         return "root_cause"
@@ -65,7 +69,10 @@ def build_orchestrated_context(db: Session, prompt: str, intent: str) -> dict[st
     tenant = get_tenant()
     org_id = tenant.organization_id
     perms = tenant.permissions
-    base = ai_advisor.build_context(db)
+    base = ai_advisor.build_context(db, prompt)
+    if "delivery_evidence" in base or "recovery_answer" in base:
+        base.update(intent=intent, tool=TOOLS.get(intent, intent), confidence=None, citations=[])
+        return base
     base["intent"] = intent
     base["tool"] = TOOLS.get(intent, intent)
 
