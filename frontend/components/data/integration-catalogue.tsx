@@ -3,12 +3,12 @@ import Link from 'next/link';
 import {ArrowRight, Database, FileSpreadsheet} from 'lucide-react';
 const catalogue=[
  {name:'SAP Business One',status:'PROTOTYPE',logo:'sap',coverage:'Read-only Service Layer: explicit mappings for suppliers, products and order headers. Real sandbox synchronization remains unverified.',href:'/data-sources/connectors'},
- {name:'Salesforce',status:'PROTOTYPE',coverage:'Mapped Accounts, products and order headers. Supplier mapping is explicit; a complete supply-chain feed has not been established.',href:'/data-sources/connectors'},
- {name:'Dynamics 365 Business Central',status:'PROTOTYPE',coverage:'Connector implementation exists for orders and inventory. An authorized test tenant and reconciliation are still required.',href:'/data-sources/connectors'},
+ {name:'Salesforce',logo:'salesforce',status:'PROTOTYPE',coverage:'Mapped Accounts, products and order headers. Supplier mapping is explicit; a complete supply-chain feed has not been established.',href:'/data-sources/connectors'},
+ {name:'Dynamics 365 Business Central',logo:'dynamics365',status:'PROTOTYPE',coverage:'Connector implementation exists for orders and inventory. An authorized test tenant and reconciliation are still required.',href:'/data-sources/connectors'},
  {name:'UPS',status:'PROTOTYPE',logo:'ups',coverage:'Shipment tracking connector code exists. External credentials and actual tracking responses require validation.',href:'/data-sources/connectors'},
- {name:'CSV and Excel',status:'IMPORT AVAILABLE',coverage:'Validated file imports for operational records. Recovery requirements and planning evidence use the Recovery Engine import contracts.',href:'/data-sources/excel'},
+ {name:'CSV and Excel',logo:'microsoftexcel',status:'IMPORT AVAILABLE',coverage:'Validated file imports for operational records. Recovery requirements and planning evidence use the Recovery Engine import contracts.',href:'/data-sources/excel'},
  {name:'SAP S/4HANA',status:'PLANNED',logo:'sap',coverage:'Separate from Business One. No S/4HANA connector has been implemented or verified.',href:'/contact'},
- {name:'Oracle Fusion Cloud ERP',status:'PLANNED',coverage:'No working Oracle connector is registered. Data mapping and API scope need discovery.',href:'/contact'},
+ {name:'Oracle Fusion Cloud ERP',logo:'oracle',status:'PLANNED',coverage:'No working Oracle connector is registered. Data mapping and API scope need discovery.',href:'/contact'},
 ];
 export function IntegrationCatalogue(){return <section aria-label="Integration capability catalogue" className="space-y-5">
  <div><h2 className="text-xl font-semibold">Data Sources and Integrations</h2><p className="mt-2 text-sm text-muted-foreground">Bring evidence from existing systems into a shared operational model. Prototype means code exists; it does not establish a live connection.</p></div>
