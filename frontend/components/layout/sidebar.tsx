@@ -89,8 +89,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
     async function ping() {
       try {
-        const res = await fetch(`${apiBase.replace(/\/$/, "")}/health/ready`, {
-          credentials: "omit",
+        const res = await fetch(`${apiBase.replace(/\/$/, "")}${apiBase ? "" : "/api"}/health/ready`, {
+          credentials: "same-origin",
           cache: "no-store",
         });
         if (cancelled) return;
